@@ -223,7 +223,7 @@
 
   .editor-header{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
   #tripTitleInput{flex:1 1 100px; min-width:0; font-size:15px; font-weight:700; padding:9px 12px;}
-  .editor-header-actions{display:flex; gap:8px; flex-shrink:0; white-space:nowrap;}
+  .editor-header-actions{display:flex; gap:8px; flex-shrink:0; white-space:nowrap; margin-left:auto; justify-content:flex-end;}
 
   /* 체크박스는 브라우저 기본 파란색 대신 모노톤으로 */
   input[type=checkbox]{ accent-color: var(--ink); }
@@ -321,8 +321,8 @@
       <button class="btn-ghost" id="backToListBtn">← 정산 목록</button>
       <input type="text" id="tripTitleInput" placeholder="정산 이름을 입력하세요 (예: 7월 여수 출장)">
       <div class="editor-header-actions">
-        <button class="btn-secondary small" id="toggleStatusBtn">정산 완료로 표시</button>
-        <button class="btn-danger small" id="deleteTripCurrentBtn">이 정산 삭제</button>
+        <button class="btn-secondary small" id="toggleStatusBtn">정산 완료</button>
+        <button class="btn-danger small" id="deleteTripCurrentBtn">정산 삭제</button>
       </div>
     </div>
 
@@ -570,7 +570,7 @@ function renderStatusButton(){
   const btn = document.getElementById('toggleStatusBtn');
   if(!state) return;
   const isDone = state.status === 'done';
-  btn.textContent = isDone ? '↩ 다시 진행중으로' : '✓ 정산 완료로 표시';
+  btn.textContent = isDone ? '↩ 다시 진행중으로' : '✓ 정산 완료';
   btn.classList.toggle('btn-secondary', !isDone);
   btn.classList.toggle('btn-done-active', isDone);
 }

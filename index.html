@@ -55,7 +55,9 @@
   .people-add .field{display:flex; flex-direction:column; gap:4px;}
   .people-add .field label{font-size:11px; color:var(--muted);}
   .people-add .field.name-field{flex:1; min-width:160px;}
-  .people-add .range-sep{padding-bottom:8px; color:var(--muted);}
+  .people-add .range-sep{color:var(--muted); flex-shrink:0;}
+  .date-range-inputs{display:flex; align-items:center; gap:6px;}
+  .date-range-inputs input[type=date]{flex:1; min-width:0;}
   .people-list{display:flex; flex-direction:column; gap:8px; margin-top:16px;}
   .person-row{
     display:flex; align-items:center; gap:12px; flex-wrap:wrap;
@@ -159,9 +161,22 @@
     border-radius:10px; padding:16px 18px; margin-bottom:10px;
   }
   .trip-card-main{flex:1; cursor:pointer;}
-  .trip-card-title{font-weight:700; font-size:15px; margin-bottom:4px;}
+  .trip-card-title{font-weight:700; font-size:15px; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
   .trip-card-meta{font-size:12px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap;}
   .trip-card-updated{font-size:11px; color:var(--muted); margin-top:4px;}
+
+  .status-badge{
+    display:inline-block; font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; flex-shrink:0;
+  }
+  .status-badge.status-ongoing{background:var(--accent-light); color:var(--accent);}
+  .status-badge.status-done{background:var(--bg); color:var(--muted); border:1px solid var(--border);}
+
+  /* 완료된 정산은 눈에 덜 띄게 톤다운 */
+  .trip-card.trip-card-done{background:var(--bg); border-color:var(--border); opacity:.65;}
+  .trip-card.trip-card-done:hover{opacity:.9;}
+  .trip-card.trip-card-done .trip-card-title{color:var(--muted); font-weight:600;}
+
+  .btn-done-active{background:var(--bg); color:var(--muted); border:1px solid var(--border);}
 
   .editor-header{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
   #tripTitleInput{flex:1; min-width:180px; font-size:15px; font-weight:700; padding:9px 12px;}
@@ -171,8 +186,11 @@
     body{padding:12px;}
     h1{font-size:17px; flex-wrap:wrap; gap:6px;}
     .card{padding:14px;}
-    .people-add{gap:6px;}
-    .people-add .field{min-width:0;}
+    .people-add{gap:10px; flex-direction:column; align-items:stretch;}
+    .people-add .field{min-width:0; width:100%;}
+    .people-add .name-field{width:100%;}
+    .date-range-inputs input[type=date]{font-size:13px; padding:7px 4px;}
+    #addPersonBtn{width:100%;}
     .editor-header{gap:8px;}
     .editor-header button{font-size:12px; padding:7px 10px;}
     #tripTitleInput{font-size:14px; min-width:120px;}
@@ -211,6 +229,19 @@
     table.expense-table td.td-del .icon-btn{ width:24px; height:24px; font-size:13px; }
     table.expense-table .split-toggle{ margin-bottom:5px; }
     table.expense-table .participants{ gap:5px 8px; }
+
+    /* 정산 요약 카드: 이름은 제목처럼, 결제/사용 금액은 한 줄에 나란히, 차액은 아래 강조 */
+    table.summary-table tr{
+      display:grid; grid-template-columns:1fr 1fr; column-gap:10px; row-gap:4px; padding:10px 12px;
+    }
+    table.summary-table td{ display:block; width:auto; padding:0; }
+    table.summary-table td[data-label="이름"]{
+      grid-column:1 / -1; font-size:15px; font-weight:700; color:var(--text); margin-bottom:2px;
+    }
+    table.summary-table td[data-label="이름"]::before{ content:none; }
+    table.summary-table td[data-label="차액 (결제-사용)"]{
+      grid-column:1 / -1; margin-top:4px; padding-top:6px; border-top:1px dashed var(--border); font-size:15px;
+    }
   }
 
   .sync-badge{
@@ -240,6 +271,7 @@
     <div class="editor-header">
       <button class="btn-ghost" id="backToListBtn">← 정산 목록</button>
       <input type="text" id="tripTitleInput" placeholder="정산 이름을 입력하세요 (예: 7월 여수 출장)">
+      <button class="btn-secondary small" id="toggleStatusBtn">정산 완료로 표시</button>
       <button class="btn-danger small" id="deleteTripCurrentBtn">이 정산 삭제</button>
     </div>
 
@@ -258,14 +290,13 @@
             <label>이름</label>
             <input type="text" id="newPersonInput" placeholder="예: 김정아">
           </div>
-          <div class="field">
-            <label>출장 시작일</label>
-            <input type="date" id="newPersonStart">
-          </div>
-          <span class="range-sep">~</span>
-          <div class="field">
-            <label>출장 종료일</label>
-            <input type="date" id="newPersonEnd">
+          <div class="field date-range-field">
+            <label>출장 기간</label>
+            <div class="date-range-inputs">
+              <input type="date" id="newPersonStart">
+              <span class="range-sep">~</span>
+              <input type="date" id="newPersonEnd">
+            </div>
           </div>
           <button class="btn-primary" id="addPersonBtn">추가</button>
         </div>
@@ -398,7 +429,7 @@ function subscribeTripsList(){
       return {
         id: d.id, title: data.title || '', createdAt: data.createdAt || Date.now(),
         updatedAt: data.updatedAt || Date.now(), people: normalizePeople(data.people),
-        days: data.days || [], items: data.items || []
+        days: data.days || [], items: data.items || [], status: data.status || 'ongoing'
       };
     });
     if(document.getElementById('view-list').style.display !== 'none'){
@@ -427,7 +458,7 @@ function subscribeTripDoc(id){
     state = {
       id: snap.id, title: data.title || '', createdAt: data.createdAt || Date.now(),
       updatedAt: data.updatedAt || Date.now(), people: normalizePeople(data.people),
-      days: data.days || [], items: data.items || []
+      days: data.days || [], items: data.items || [], status: data.status || 'ongoing'
     };
     if(document.getElementById('view-editor').style.display !== 'none'){
       const titleInput = document.getElementById('tripTitleInput');
@@ -435,6 +466,7 @@ function subscribeTripDoc(id){
       renderPeople();
       renderExpenses();
       renderSummary();
+      renderStatusButton();
     }
   }, err=>{
     showAppError('정산 데이터를 불러오지 못했습니다.\n' + err.message);
@@ -444,11 +476,13 @@ function subscribeTripDoc(id){
 // state 변경 후 호출 -> 잠시 후 Firestore에 저장 (연속 입력 시 매 글자마다 쓰지 않도록 묶어서 저장)
 function saveState(){
   if(!currentTripId || !state) return;
+  // 타이머가 실행되기 전에 화면을 벗어나도(state가 null이 되어도) 안전하게 저장되도록 지금 시점 값을 캡처
+  const tripIdToSave = currentTripId;
+  const { id, ...dataToSave } = state;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(()=>{
-    const { id, ...data } = state;
-    data.updatedAt = Date.now();
-    fsdb.collection(TRIPS_COLLECTION).doc(currentTripId).set(data).catch(err=>{
+    dataToSave.updatedAt = Date.now();
+    fsdb.collection(TRIPS_COLLECTION).doc(tripIdToSave).set(dataToSave).catch(err=>{
       showAppError('저장에 실패했습니다.\n' + err.message + '\n\nFirestore 보안 규칙에서 쓰기가 막혀있지 않은지 확인해주세요.');
     });
   }, 400);
@@ -475,7 +509,24 @@ function showEditor(){
   renderPeople();
   renderExpenses();
   renderSummary();
+  renderStatusButton();
 }
+
+function renderStatusButton(){
+  const btn = document.getElementById('toggleStatusBtn');
+  if(!state) return;
+  const isDone = state.status === 'done';
+  btn.textContent = isDone ? '↩ 다시 진행중으로' : '✓ 정산 완료로 표시';
+  btn.classList.toggle('btn-secondary', !isDone);
+  btn.classList.toggle('btn-done-active', isDone);
+}
+
+document.getElementById('toggleStatusBtn').addEventListener('click', ()=>{
+  if(!state) return;
+  state.status = state.status === 'done' ? 'ongoing' : 'done';
+  saveState();
+  renderStatusButton();
+});
 
 /* ---------- TRIP LIST ---------- */
 function fmtUpdated(ts){
@@ -502,11 +553,22 @@ function renderTripList(){
     container.innerHTML = '<div class="empty">아직 저장된 정산이 없습니다. "+ 새 정산 만들기"로 시작해보세요.</div>';
     return;
   }
-  const sorted = [...tripsCache].sort((a,b)=> b.updatedAt - a.updatedAt);
-  container.innerHTML = sorted.map(t=>`
-    <div class="trip-card">
+  // 진행중인 정산을 먼저, 완료된 정산은 뒤로 (각 그룹 안에서는 최근 수정순)
+  const sorted = [...tripsCache].sort((a,b)=>{
+    const aDone = a.status === 'done' ? 1 : 0;
+    const bDone = b.status === 'done' ? 1 : 0;
+    if(aDone !== bDone) return aDone - bDone;
+    return b.updatedAt - a.updatedAt;
+  });
+  container.innerHTML = sorted.map(t=>{
+    const isDone = t.status === 'done';
+    const badge = isDone
+      ? '<span class="status-badge status-done">완료</span>'
+      : '<span class="status-badge status-ongoing">진행중</span>';
+    return `
+    <div class="trip-card ${isDone ? 'trip-card-done' : ''}">
       <div class="trip-card-main" data-open-trip="${t.id}">
-        <div class="trip-card-title">${escapeHtml(t.title) || '(제목 없는 정산)'}</div>
+        <div class="trip-card-title">${badge}${escapeHtml(t.title) || '(제목 없는 정산)'}</div>
         <div class="trip-card-meta">
           <span>${tripDateRange(t)}</span>
           <span>· 인원 ${t.people.length}명</span>
@@ -516,12 +578,13 @@ function renderTripList(){
       </div>
       <button class="btn-ghost del-btn" data-delete-trip="${t.id}">삭제</button>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 document.getElementById('newTripBtn').addEventListener('click', ()=>{
   const now = Date.now();
-  const data = { title: '', createdAt: now, updatedAt: now, people: [], days: [], items: [] };
+  const data = { title: '', createdAt: now, updatedAt: now, people: [], days: [], items: [], status: 'ongoing' };
   fsdb.collection(TRIPS_COLLECTION).add(data).then(ref=>{
     currentTripId = ref.id;
     state = { id: ref.id, ...data };

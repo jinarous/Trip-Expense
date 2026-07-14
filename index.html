@@ -139,6 +139,20 @@
     background:var(--accent-light); border-radius:10px; font-weight:700; margin-top:6px;
   }
 
+  /* 날짜 많을 때 빠르게 이동하기 위한 상단 퀵 네비게이션 */
+  .day-nav{
+    position:sticky; top:0; z-index:5; display:flex; gap:6px; overflow-x:auto; white-space:nowrap;
+    padding:6px 2px 10px; margin-bottom:4px; background:var(--card);
+    -webkit-overflow-scrolling:touch; scrollbar-width:none;
+  }
+  .day-nav::-webkit-scrollbar{display:none;}
+  .day-nav-btn{
+    flex-shrink:0; font-size:12px; padding:6px 12px; border-radius:999px;
+    background:var(--bg); border:1px solid var(--border); color:var(--muted); font-weight:600;
+  }
+  .day-nav-btn:hover{background:var(--accent-light); color:var(--accent); border-color:var(--accent);}
+  .day-nav-btn.bottom-btn{margin-left:auto; background:var(--accent-light); color:var(--accent); border-color:var(--accent);}
+
   .summary-table{min-width:420px;}
   .summary-table td.num, .summary-table th.num{text-align:right;}
   .diff-pos{color:var(--pos); font-weight:700;}
@@ -311,6 +325,7 @@
         <div class="toolbar">
           <p class="section-title" style="margin:0;">지출 내역</p>
         </div>
+        <div class="day-nav" id="dayNav"></div>
         <div id="daysContainer"></div>
         <button class="btn-secondary" id="addDayBtn">+ 새 날짜 추가</button>
         <div class="grand-total-bar">
@@ -796,18 +811,31 @@ function removeItem(id){
 function renderExpenses(){
   const container = document.getElementById('daysContainer');
   const addDayBtn = document.getElementById('addDayBtn');
+  const dayNav = document.getElementById('dayNav');
   addDayBtn.disabled = state.people.length === 0;
 
   if(state.people.length === 0){
     container.innerHTML = '<div class="empty">먼저 "1. 인원 설정" 탭에서 인원을 등록해주세요.</div>';
     document.getElementById('grandTotal').textContent = fmt(0);
+    dayNav.innerHTML = '';
     return;
   }
 
   if(state.days.length === 0){
     container.innerHTML = '<div class="empty">아래 버튼으로 첫 날짜를 추가해주세요. 같은 날짜의 지출은 한 번만 날짜를 선택하면 됩니다.</div>';
     document.getElementById('grandTotal').textContent = fmt(0);
+    dayNav.innerHTML = '';
     return;
+  }
+
+  // 날짜가 여러 개일 때 빠르게 이동할 수 있는 퀵 네비게이션
+  if(state.days.length > 1){
+    const navBtns = state.days.map((day, idx)=>
+      `<button type="button" class="day-nav-btn" data-role="scroll-to-day" data-day="${day.id}">${idx+1}일차</button>`
+    ).join('');
+    dayNav.innerHTML = navBtns + `<button type="button" class="day-nav-btn bottom-btn" data-role="scroll-to-bottom">맨 아래로 ↓</button>`;
+  } else {
+    dayNav.innerHTML = '';
   }
 
   container.innerHTML = state.days.map((day, idx)=>{
@@ -897,6 +925,18 @@ function renderExpenses(){
 }
 
 document.getElementById('addDayBtn').addEventListener('click', addDay);
+
+document.getElementById('dayNav').addEventListener('click', (e)=>{
+  const role = e.target.getAttribute('data-role');
+  if(role === 'scroll-to-day'){
+    const dayId = e.target.getAttribute('data-day');
+    const target = document.querySelector(`.day-card[data-day="${dayId}"]`);
+    if(target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if(role === 'scroll-to-bottom'){
+    document.getElementById('addDayBtn').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+});
 
 document.getElementById('daysContainer').addEventListener('click', (e)=>{
   const role = e.target.getAttribute('data-role');

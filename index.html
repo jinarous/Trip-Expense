@@ -406,7 +406,7 @@ function showList(){
 
 function showEditor(){
   document.getElementById('view-list').style.display = 'none';
-  document.getElementById('view-editor').style.display = '';
+  document.getElementById('view-editor').style.display = 'block';
   document.getElementById('tripTitleInput').value = state.title || '';
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));

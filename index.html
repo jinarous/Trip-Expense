@@ -181,6 +181,7 @@
     border:1px solid var(--border); border-radius:999px; padding:4px 12px; white-space:nowrap;
   }
   .grand-total-top::before{content:"합계 "; font-weight:600; color:var(--muted);}
+  .toolbar-right{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
 
   /* 날짜 많을 때 빠르게 이동하기 위한 상단 퀵 네비게이션 */
   .day-nav{
@@ -233,6 +234,25 @@
   /* 완료된 정산은 눈에 덜 띄게 톤다운 */
   .trip-card.trip-card-done{background:var(--bg); border-color:var(--border); opacity:.65;}
   .trip-card.trip-card-done:hover{opacity:.9;}
+
+  /* 비밀번호로 보호된 정산 표시 */
+  .lock-icon{font-size:12px;}
+
+  /* 비밀번호 입력/설정용 모달 */
+  .modal-overlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:50;
+    align-items:center; justify-content:center; padding:20px;
+  }
+  .modal-box{
+    background:var(--card); border-radius:16px; padding:22px; max-width:360px; width:100%;
+    box-shadow:0 10px 40px rgba(0,0,0,.25);
+  }
+  .modal-title{font-size:16px; font-weight:800; margin:0 0 8px;}
+  .modal-desc{font-size:12px; color:var(--muted); margin:0 0 14px; line-height:1.5;}
+  .modal-box input[type=password]{width:100%; margin-bottom:6px;}
+  .modal-error{display:none; font-size:12px; color:var(--danger); margin:0 0 8px;}
+  .modal-error.show{display:block;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:12px;}
   .trip-card.trip-card-done .trip-card-title{color:var(--muted); font-weight:600;}
 
   .btn-done-active{background:var(--bg); color:var(--muted); border:1px solid var(--border);}
@@ -260,6 +280,9 @@
     .day-header{padding:10px 12px; gap:8px;}
     .day-body{padding:8px 10px 12px;}
     .grand-total-bar{padding:12px 14px; font-size:14px;}
+    .toolbar-right{width:100%; justify-content:space-between;}
+    .toolbar-right #addDayBtn{font-size:12px; padding:6px 10px;}
+    .grand-total-top{font-size:12px; padding:4px 10px;}
     table{font-size:12px;}
 
     /* 좁은 화면에서는 표를 옆으로 스크롤하는 대신, 항목별 카드로 세로로 쌓아서 보여줌 */
@@ -341,6 +364,7 @@
       <button class="btn-ghost" id="backToListBtn">← 정산 목록</button>
       <input type="text" id="tripTitleInput" placeholder="정산 이름을 입력하세요 (예: 7월 여수 출장)">
       <div class="editor-header-actions">
+        <button class="btn-secondary small" id="pwSetBtn">🔒 비밀번호 설정</button>
         <button class="btn-secondary small" id="toggleStatusBtn">정산 완료</button>
         <button class="btn-danger small" id="deleteTripCurrentBtn">정산 삭제</button>
       </div>
@@ -383,7 +407,10 @@
       <div class="card">
         <div class="toolbar">
           <p class="section-title" style="margin:0;">지출 내역</p>
-          <span class="grand-total-top" id="grandTotalTop">0원</span>
+          <div class="toolbar-right">
+            <button class="btn-secondary small" id="addDayBtn">+ 새 날짜 추가</button>
+            <span class="grand-total-top" id="grandTotalTop">0원</span>
+          </div>
         </div>
         <div class="fx-default-settings">
           <div class="split-toggle">
@@ -404,7 +431,6 @@
         </div>
         <div class="day-nav" id="dayNav"></div>
         <div id="daysContainer"></div>
-        <button class="btn-secondary" id="addDayBtn">+ 새 날짜 추가</button>
         <div class="grand-total-bar">
           <span>전체 합계</span>
           <span id="grandTotal">0원</span>
@@ -448,6 +474,33 @@
   <p class="footer-note">모든 변경사항은 실시간으로 저장되고, 같은 페이지를 보는 다른 사람 화면에도 자동 반영됩니다.</p>
 </div>
 
+<!-- 정산 열람 시 비밀번호 확인 모달 -->
+<div class="modal-overlay" id="pwGateModal">
+  <div class="modal-box">
+    <p class="modal-title">🔒 비밀번호 필요</p>
+    <p class="modal-desc">이 정산은 비밀번호로 보호되어 있어요. 출장에 함께 간 인원에게 비밀번호를 확인해주세요.</p>
+    <input type="password" id="pwGateInput" placeholder="비밀번호 입력">
+    <p class="modal-error" id="pwGateError">비밀번호가 올바르지 않습니다.</p>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="pwGateCancelBtn">취소</button>
+      <button class="btn-primary" id="pwGateConfirmBtn">확인</button>
+    </div>
+  </div>
+</div>
+
+<!-- 정산 비밀번호 설정/변경/해제 모달 -->
+<div class="modal-overlay" id="pwSetModal">
+  <div class="modal-box">
+    <p class="modal-title">비밀번호 설정</p>
+    <p class="modal-desc">설정하면 이 정산을 목록에서 열 때마다 비밀번호를 입력해야 해요. 출장에 함께 간 인원끼리만 공유하세요. 비워두고 저장하면 비밀번호가 해제됩니다.</p>
+    <input type="password" id="pwSetInput" placeholder="새 비밀번호 (비우면 해제)">
+    <div class="modal-actions">
+      <button class="btn-ghost" id="pwSetCancelBtn">취소</button>
+      <button class="btn-primary" id="pwSetConfirmBtn">저장</button>
+    </div>
+  </div>
+</div>
+
 <script>
 /* =========================================================
    Firebase 설정 - Firebase 콘솔 > 프로젝트 설정 > 내 앱 에서
@@ -466,6 +519,9 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const fsdb = firebase.firestore();
 const TRIPS_COLLECTION = 'trips';
+
+// 정산 비밀번호를 다같이 잊어버렸을 때를 위한 마스터 비밀번호 (해시로만 저장, 원문은 코드 어디에도 없음)
+const MASTER_PASSWORD_HASH = '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0';
 
 function setSyncStatus(ok, text){
   document.getElementById('syncDot').classList.toggle('offline', !ok);
@@ -497,6 +553,22 @@ function normalizePeople(arr){
 function fmt(n){
   n = Math.round(n || 0);
   return n.toLocaleString('ko-KR') + '원';
+}
+
+// 정산 비밀번호를 그대로 저장하지 않고 SHA-256 해시로 변환 (완전한 보안은 아니지만 평문 노출은 방지)
+async function sha256Hex(text){
+  const enc = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function openModal(id){
+  const el = document.getElementById(id);
+  if(el) el.style.display = 'flex';
+}
+function closeModal(id){
+  const el = document.getElementById(id);
+  if(el) el.style.display = 'none';
 }
 
 // 지출 내역 하단/상단 전체 합계 표시를 함께 갱신
@@ -534,6 +606,23 @@ let tripDocUnsub = null;  // 현재 정산 문서 구독 해제 함수
 let currentTripId = null;
 let state = null;         // 현재 편집 중인 정산 데이터
 let saveTimer = null;
+let pendingOpenTripId = null; // 비밀번호 확인 대기 중인 정산 id
+const PW_UNLOCK_HOURS = 24; // 비밀번호를 한 번 맞추면 이 시간(시간 단위) 동안은 다시 묻지 않음
+
+// 정산별 비밀번호 잠금 해제 상태를 localStorage에 만료 시각과 함께 저장 (탭을 닫거나 새로고침해도 하루 동안 유지)
+function isTripUnlocked(id){
+  try{
+    const exp = localStorage.getItem('pwUnlock_' + id);
+    return !!exp && Number(exp) > Date.now();
+  } catch(e){ return false; }
+}
+function markTripUnlocked(id){
+  try{ localStorage.setItem('pwUnlock_' + id, String(Date.now() + PW_UNLOCK_HOURS * 60 * 60 * 1000)); }
+  catch(e){ /* localStorage를 못 쓰는 환경이면 그냥 이번 화면에서만 통과시킴 */ }
+}
+function clearTripUnlock(id){
+  try{ localStorage.removeItem('pwUnlock_' + id); } catch(e){}
+}
 
 function subscribeTripsList(){
   if(tripsUnsub) tripsUnsub();
@@ -545,7 +634,9 @@ function subscribeTripsList(){
       return {
         id: d.id, title: data.title || '', createdAt: data.createdAt || Date.now(),
         updatedAt: data.updatedAt || Date.now(), people: normalizePeople(data.people),
-        days: data.days || [], items: data.items || [], status: data.status || 'ongoing'
+        days: data.days || [], items: data.items || [], status: data.status || 'ongoing',
+        defaultCurrency: data.defaultCurrency || 'KRW', defaultFxRate: data.defaultFxRate || '',
+        passwordHash: data.passwordHash || ''
       };
     });
     if(document.getElementById('view-list').style.display !== 'none'){
@@ -574,7 +665,9 @@ function subscribeTripDoc(id){
     state = {
       id: snap.id, title: data.title || '', createdAt: data.createdAt || Date.now(),
       updatedAt: data.updatedAt || Date.now(), people: normalizePeople(data.people),
-      days: data.days || [], items: data.items || [], status: data.status || 'ongoing'
+      days: data.days || [], items: data.items || [], status: data.status || 'ongoing',
+      defaultCurrency: data.defaultCurrency || 'KRW', defaultFxRate: data.defaultFxRate || '',
+      passwordHash: data.passwordHash || ''
     };
     if(document.getElementById('view-editor').style.display !== 'none'){
       const titleInput = document.getElementById('tripTitleInput');
@@ -583,6 +676,7 @@ function subscribeTripDoc(id){
       renderExpenses();
       renderSummary();
       renderStatusButton();
+      renderPwSetButton();
     }
   }, err=>{
     showAppError('정산 데이터를 불러오지 못했습니다.\n' + err.message);
@@ -626,6 +720,7 @@ function showEditor(){
   renderExpenses();
   renderSummary();
   renderStatusButton();
+  renderPwSetButton();
 }
 
 function renderStatusButton(){
@@ -635,6 +730,12 @@ function renderStatusButton(){
   btn.textContent = isDone ? '↩ 다시 진행중으로' : '✓ 정산 완료';
   btn.classList.toggle('btn-secondary', !isDone);
   btn.classList.toggle('btn-done-active', isDone);
+}
+
+function renderPwSetButton(){
+  const btn = document.getElementById('pwSetBtn');
+  if(!btn || !state) return;
+  btn.textContent = state.passwordHash ? '🔒 비밀번호 변경/해제' : '🔒 비밀번호 설정';
 }
 
 document.getElementById('toggleStatusBtn').addEventListener('click', ()=>{
@@ -681,10 +782,11 @@ function renderTripList(){
     const badge = isDone
       ? '<span class="status-badge status-done">완료</span>'
       : '<span class="status-badge status-ongoing">진행중</span>';
+    const lock = t.passwordHash ? '<span class="lock-icon" title="비밀번호로 보호된 정산">🔒</span>' : '';
     return `
     <div class="trip-card ${isDone ? 'trip-card-done' : ''}">
       <div class="trip-card-main" data-open-trip="${t.id}">
-        <div class="trip-card-title">${badge}${escapeHtml(t.title) || '(제목 없는 정산)'}</div>
+        <div class="trip-card-title">${badge}${lock}${escapeHtml(t.title) || '(제목 없는 정산)'}</div>
         <div class="trip-card-meta">
           <span>${tripDateRange(t)}</span>
           <span>· 인원 ${t.people.length}명</span>
@@ -700,7 +802,7 @@ function renderTripList(){
 
 document.getElementById('newTripBtn').addEventListener('click', ()=>{
   const now = Date.now();
-  const data = { title: '', createdAt: now, updatedAt: now, people: [], days: [], items: [], status: 'ongoing', defaultCurrency: 'KRW', defaultFxRate: '' };
+  const data = { title: '', createdAt: now, updatedAt: now, people: [], days: [], items: [], status: 'ongoing', defaultCurrency: 'KRW', defaultFxRate: '', passwordHash: '' };
   fsdb.collection(TRIPS_COLLECTION).add(data).then(ref=>{
     currentTripId = ref.id;
     state = { id: ref.id, ...data };
@@ -727,11 +829,76 @@ document.getElementById('tripList').addEventListener('click', (e)=>{
     const id = openEl.getAttribute('data-open-trip');
     const trip = tripsCache.find(t=>t.id===id);
     if(!trip) return;
-    currentTripId = id;
-    state = { ...trip };
-    subscribeTripDoc(id);
-    showEditor();
+    if(trip.passwordHash && !isTripUnlocked(id)){
+      pendingOpenTripId = id;
+      document.getElementById('pwGateInput').value = '';
+      document.getElementById('pwGateError').classList.remove('show');
+      openModal('pwGateModal');
+      document.getElementById('pwGateInput').focus();
+      return;
+    }
+    openTripById(id, trip);
   }
+});
+
+function openTripById(id, trip){
+  currentTripId = id;
+  state = { ...trip };
+  subscribeTripDoc(id);
+  showEditor();
+}
+
+document.getElementById('pwGateCancelBtn').addEventListener('click', ()=>{
+  pendingOpenTripId = null;
+  closeModal('pwGateModal');
+});
+
+document.getElementById('pwGateConfirmBtn').addEventListener('click', async ()=>{
+  if(!pendingOpenTripId) return;
+  const trip = tripsCache.find(t=>t.id===pendingOpenTripId);
+  if(!trip){ closeModal('pwGateModal'); return; }
+  const pw = document.getElementById('pwGateInput').value;
+  const hash = await sha256Hex(pw);
+  if(hash === trip.passwordHash || hash === MASTER_PASSWORD_HASH){
+    markTripUnlocked(pendingOpenTripId);
+    const id = pendingOpenTripId;
+    pendingOpenTripId = null;
+    closeModal('pwGateModal');
+    openTripById(id, trip);
+  } else {
+    document.getElementById('pwGateError').classList.add('show');
+  }
+});
+
+document.getElementById('pwGateInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') document.getElementById('pwGateConfirmBtn').click();
+});
+
+document.getElementById('pwSetBtn').addEventListener('click', ()=>{
+  if(!state) return;
+  document.getElementById('pwSetInput').value = '';
+  openModal('pwSetModal');
+  document.getElementById('pwSetInput').focus();
+});
+
+document.getElementById('pwSetCancelBtn').addEventListener('click', ()=>{
+  closeModal('pwSetModal');
+});
+
+document.getElementById('pwSetConfirmBtn').addEventListener('click', async ()=>{
+  if(!state) return;
+  const pw = document.getElementById('pwSetInput').value;
+  state.passwordHash = pw ? await sha256Hex(pw) : '';
+  // 목록으로 돌아가 다시 열 때는 정말로 비밀번호가 걸렸는지 확인할 수 있도록, 자동으로 잠금 해제 처리하지 않음
+  clearTripUnlock(currentTripId);
+  saveState();
+  renderPwSetButton();
+  closeModal('pwSetModal');
+  alert(pw ? '비밀번호가 설정되었습니다.' : '비밀번호가 해제되었습니다.');
+});
+
+document.getElementById('pwSetInput').addEventListener('keydown', (e)=>{
+  if(e.key === 'Enter') document.getElementById('pwSetConfirmBtn').click();
 });
 
 document.getElementById('backToListBtn').addEventListener('click', showList);
@@ -885,6 +1052,10 @@ function addDay(){
   });
   saveState();
   renderExpenses();
+
+  // 새로 추가된 날짜 카드로 자동 스크롤 (버튼이 상단에 있어 바로 보이지 않으므로)
+  const newCard = document.querySelector(`.day-card[data-day="${day.id}"]`);
+  if(newCard) newCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function removeDay(dayId){

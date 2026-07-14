@@ -249,7 +249,8 @@
   }
   .modal-title{font-size:16px; font-weight:800; margin:0 0 8px;}
   .modal-desc{font-size:12px; color:var(--muted); margin:0 0 14px; line-height:1.5;}
-  .modal-box input[type=password]{width:100%; margin-bottom:6px;}
+  /* font-size를 16px 미만으로 두면 iOS Safari가 포커스 시 화면을 확대해버려서 16px로 고정 */
+  .modal-box input[type=password]{width:100%; margin-bottom:6px; font-size:16px; padding:9px 10px;}
   .modal-error{display:none; font-size:12px; color:var(--danger); margin:0 0 8px;}
   .modal-error.show{display:block;}
   .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:12px;}

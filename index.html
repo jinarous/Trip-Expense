@@ -116,14 +116,19 @@
   .icon-btn{width:28px; height:28px; padding:0; display:inline-flex; align-items:center; justify-content:center; font-size:15px;}
 
   .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -2px;}
-  table{width:100%; min-width:520px; border-collapse:collapse; font-size:13px;}
+  table{width:100%; min-width:620px; border-collapse:collapse; font-size:13px;}
   th, td{padding:8px 6px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle;}
   th{color:var(--muted); font-weight:600; font-size:12px; white-space:nowrap;}
   td input[type=text], td input[type=number], td input[type=date]{width:100%;}
   .col-place{min-width:140px;}
-  .col-amount{width:120px;}
+  .col-amount{width:190px;}
   .col-payer{width:110px;}
   .col-del{width:36px;}
+  .amount-row{display:flex; gap:5px;}
+  .currency-select{flex-shrink:0; width:62px; font-size:11px; padding:6px 2px; color:var(--muted);}
+  .fx-row{display:flex; align-items:center; gap:6px; margin-top:4px;}
+  .fx-row input{font-size:11px; padding:5px 6px;}
+  .fx-converted{font-size:11px; color:var(--muted); white-space:nowrap;}
   .participants{display:flex; flex-wrap:wrap; gap:6px 14px;}
   .chip{
     display:inline-flex; align-items:center; gap:5px; font-size:12px;
@@ -146,6 +151,12 @@
   .custom-amount-input{width:90px; font-size:12px; padding:4px 6px;}
   .custom-split-sum{font-size:11px; color:var(--muted); margin-top:2px;}
   .custom-split-sum.mismatch{color:var(--danger); font-weight:600;}
+  .fx-default-settings{background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:14px;}
+  .fx-default-row{display:none; align-items:center; gap:8px; margin-top:8px; flex-wrap:wrap;}
+  .fx-default-row.show{display:flex;}
+  .fx-default-row .currency-select{width:72px; padding:6px 4px;}
+  .fx-default-row input{width:140px; font-size:12px; padding:6px 8px;}
+  .fx-default-row .hint{font-size:11px; flex-basis:100%; margin-top:2px;}
   .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:8px; flex-wrap:wrap;}
   .toolbar .right{display:flex; gap:8px;}
 
@@ -165,6 +176,11 @@
   }
   .grand-total-bar span:first-child{font-size:13px; font-weight:600; color:rgba(255,255,255,.75);}
   .grand-total-bar span:last-child{font-size:20px; font-weight:800; letter-spacing:-.2px;}
+  .grand-total-top{
+    font-size:13px; font-weight:800; color:var(--text); background:var(--accent-light);
+    border:1px solid var(--border); border-radius:999px; padding:4px 12px; white-space:nowrap;
+  }
+  .grand-total-top::before{content:"합계 "; font-weight:600; color:var(--muted);}
 
   /* 날짜 많을 때 빠르게 이동하기 위한 상단 퀵 네비게이션 */
   .day-nav{
@@ -268,8 +284,12 @@
     }
     table.expense-table td{ display:block; width:auto; padding:0; }
     table.expense-table td[data-label="사용처"]{ grid-column:1 / -1; }
+    table.expense-table td[data-label="금액"]{ grid-column:1 / -1; }
+    table.expense-table td[data-label="결제자"]{ grid-column:1 / -1; max-width:160px; }
     table.expense-table td[data-label="해당자 / 분담 금액"]{ grid-column:1 / -1; margin-top:2px; }
     table.expense-table input, table.expense-table select{ font-size:13px; padding:6px 8px; }
+    table.expense-table .currency-select{ font-size:12px; padding:6px 2px; }
+    table.expense-table .fx-row input{ font-size:12px; padding:5px 6px; }
     table.expense-table td.td-del{
       position:absolute; top:8px; right:6px; grid-column:auto; text-align:center;
     }
@@ -363,6 +383,24 @@
       <div class="card">
         <div class="toolbar">
           <p class="section-title" style="margin:0;">지출 내역</p>
+          <span class="grand-total-top" id="grandTotalTop">0원</span>
+        </div>
+        <div class="fx-default-settings">
+          <div class="split-toggle">
+            <button type="button" class="split-toggle-btn" id="fxDefaultKrwBtn" data-mode="KRW"><span class="check-mark">✓</span>국내 (원화)</button>
+            <button type="button" class="split-toggle-btn" id="fxDefaultForeignBtn" data-mode="FOREIGN"><span class="check-mark">✓</span>해외</button>
+          </div>
+          <div class="fx-default-row" id="fxDefaultRow">
+            <select id="fxDefaultCurrency" class="currency-select">
+              <option value="USD">USD</option>
+              <option value="JPY">JPY</option>
+              <option value="EUR">EUR</option>
+              <option value="CNY">CNY</option>
+              <option value="OTHER">기타</option>
+            </select>
+            <input type="text" inputmode="decimal" id="fxDefaultRate" placeholder="환율 (예: 1350)">
+            <span class="hint" style="margin:0;">이후 새로 추가하는 항목에 기본으로 적용돼요. 항목별로 원화 등 다른 통화로 개별 변경도 가능합니다.</span>
+          </div>
         </div>
         <div class="day-nav" id="dayNav"></div>
         <div id="daysContainer"></div>
@@ -459,6 +497,30 @@ function normalizePeople(arr){
 function fmt(n){
   n = Math.round(n || 0);
   return n.toLocaleString('ko-KR') + '원';
+}
+
+// 지출 내역 하단/상단 전체 합계 표시를 함께 갱신
+function setGrandTotal(text){
+  const bottom = document.getElementById('grandTotal');
+  if(bottom) bottom.textContent = text;
+  const top = document.getElementById('grandTotalTop');
+  if(top) top.textContent = text;
+}
+
+// 외화 금액/환율처럼 소수점 둘째 자리까지 허용하되, .00처럼 불필요한 소수점은 강제로 붙이지 않는 입력값 처리
+function sanitizeDecimal(raw){
+  let v = String(raw || '').replace(/[^0-9.]/g, '');
+  const dotIdx = v.indexOf('.');
+  if(dotIdx !== -1){
+    v = v.slice(0, dotIdx + 1) + v.slice(dotIdx + 1).replace(/\./g, '');
+    const [intPart, decPart = ''] = v.split('.');
+    v = intPart + '.' + decPart.slice(0, 2);
+  }
+  return v;
+}
+function formatDecimal(n){
+  const num = Number(n) || 0;
+  return num.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
 }
 
 function escapeHtml(s){
@@ -638,7 +700,7 @@ function renderTripList(){
 
 document.getElementById('newTripBtn').addEventListener('click', ()=>{
   const now = Date.now();
-  const data = { title: '', createdAt: now, updatedAt: now, people: [], days: [], items: [], status: 'ongoing' };
+  const data = { title: '', createdAt: now, updatedAt: now, people: [], days: [], items: [], status: 'ongoing', defaultCurrency: 'KRW', defaultFxRate: '' };
   fsdb.collection(TRIPS_COLLECTION).add(data).then(ref=>{
     currentTripId = ref.id;
     state = { id: ref.id, ...data };
@@ -818,7 +880,8 @@ function addDay(){
   const day = { id: uid(), date };
   state.days.push(day);
   state.items.push({
-    id: uid(), dayId: day.id, place: '', amount: 0, payer: '', participants: defaultParticipantsForDate(date), splitMode: 'even', customAmounts: {}
+    id: uid(), dayId: day.id, place: '', amount: 0, payer: '', participants: defaultParticipantsForDate(date), splitMode: 'even', customAmounts: {},
+    currency: state.defaultCurrency || 'KRW', fxRate: state.defaultFxRate || '', foreignAmount: ''
   });
   saveState();
   renderExpenses();
@@ -835,7 +898,8 @@ function removeDay(dayId){
 function addItem(dayId){
   const day = state.days.find(d => d.id === dayId);
   state.items.push({
-    id: uid(), dayId, place: '', amount: 0, payer: '', participants: defaultParticipantsForDate(day ? day.date : ''), splitMode: 'even', customAmounts: {}
+    id: uid(), dayId, place: '', amount: 0, payer: '', participants: defaultParticipantsForDate(day ? day.date : ''), splitMode: 'even', customAmounts: {},
+    currency: state.defaultCurrency || 'KRW', fxRate: state.defaultFxRate || '', foreignAmount: ''
   });
   saveState();
   renderExpenses();
@@ -847,7 +911,25 @@ function removeItem(id){
   renderExpenses();
 }
 
+function renderFxDefaultSettings(){
+  const cur = state.defaultCurrency || 'KRW';
+  const isForeign = cur !== 'KRW';
+  const krwBtn = document.getElementById('fxDefaultKrwBtn');
+  const foreignBtn = document.getElementById('fxDefaultForeignBtn');
+  const row = document.getElementById('fxDefaultRow');
+  const currencySel = document.getElementById('fxDefaultCurrency');
+  const rateInput = document.getElementById('fxDefaultRate');
+  if(!krwBtn) return;
+  krwBtn.classList.toggle('active', !isForeign);
+  foreignBtn.classList.toggle('active', isForeign);
+  row.classList.toggle('show', isForeign);
+  currencySel.value = isForeign ? cur : 'USD';
+  const rate = state.defaultFxRate;
+  rateInput.value = rate ? formatDecimal(rate) : '';
+}
+
 function renderExpenses(){
+  renderFxDefaultSettings();
   const container = document.getElementById('daysContainer');
   const addDayBtn = document.getElementById('addDayBtn');
   const dayNav = document.getElementById('dayNav');
@@ -855,14 +937,14 @@ function renderExpenses(){
 
   if(state.people.length === 0){
     container.innerHTML = '<div class="empty">먼저 "1. 인원 설정" 탭에서 인원을 등록해주세요.</div>';
-    document.getElementById('grandTotal').textContent = fmt(0);
+    setGrandTotal(fmt(0));
     dayNav.innerHTML = '';
     return;
   }
 
   if(state.days.length === 0){
     container.innerHTML = '<div class="empty">아래 버튼으로 첫 날짜를 추가해주세요. 같은 날짜의 지출은 한 번만 날짜를 선택하면 됩니다.</div>';
-    document.getElementById('grandTotal').textContent = fmt(0);
+    setGrandTotal(fmt(0));
     dayNav.innerHTML = '';
     return;
   }
@@ -922,10 +1004,31 @@ function renderExpenses(){
       }
 
       const amountDisplay = it.amount ? Number(it.amount).toLocaleString('ko-KR') : '';
+      const cur = it.currency || 'KRW';
+      const isForeign = cur !== 'KRW';
+      const foreignDisplay = it.foreignAmount ? formatDecimal(it.foreignAmount) : '';
+      const rateDisplay = it.fxRate ? formatDecimal(it.fxRate) : '';
+      const currencyOptions = ['KRW','USD','JPY','EUR','CNY','OTHER'].map(c=>{
+        const label = c === 'KRW' ? '원화' : c === 'OTHER' ? '기타' : c;
+        return `<option value="${c}" ${cur===c?'selected':''}>${label}</option>`;
+      }).join('');
+      const amountCell = isForeign
+        ? `<div class="amount-row">
+             <select data-role="currency" data-id="${it.id}" class="currency-select">${currencyOptions}</select>
+             <input type="text" inputmode="decimal" data-role="fx-amount" data-id="${it.id}" value="${foreignDisplay}" placeholder="외화 금액">
+           </div>
+           <div class="fx-row">
+             <input type="text" inputmode="decimal" data-role="fx-rate" data-id="${it.id}" value="${rateDisplay}" placeholder="환율 (예: 1350)">
+             <span class="fx-converted">≈ ${fmt(it.amount||0)}</span>
+           </div>`
+        : `<div class="amount-row">
+             <select data-role="currency" data-id="${it.id}" class="currency-select">${currencyOptions}</select>
+             <input type="text" inputmode="numeric" data-role="amount" data-id="${it.id}" value="${amountDisplay}" placeholder="0">
+           </div>`;
 
       return `<tr data-row="${it.id}">
         <td data-label="사용처"><input type="text" data-role="place" data-id="${it.id}" value="${escapeHtml(it.place)}" placeholder="예: 점심 식사"></td>
-        <td data-label="금액 (원)"><input type="text" inputmode="numeric" data-role="amount" data-id="${it.id}" value="${amountDisplay}" placeholder="0"></td>
+        <td data-label="금액" class="amount-cell">${amountCell}</td>
         <td data-label="결제자"><select data-role="payer" data-id="${it.id}">${payerOptions}</select></td>
         <td data-label="해당자 / 분담 금액">${participantsHtml}</td>
         <td data-label="" class="td-del"><button class="btn-ghost icon-btn" data-role="delete-item" data-id="${it.id}" title="삭제">✕</button></td>
@@ -945,7 +1048,7 @@ function renderExpenses(){
             <thead>
               <tr>
                 <th class="col-place">사용처</th>
-                <th class="col-amount">금액 (원)</th>
+                <th class="col-amount">금액</th>
                 <th class="col-payer">결제자</th>
                 <th>해당자 / 분담 금액</th>
                 <th class="col-del"></th>
@@ -960,10 +1063,42 @@ function renderExpenses(){
   }).join('');
 
   const grand = state.items.reduce((s,it)=> s + (Number(it.amount)||0), 0);
-  document.getElementById('grandTotal').textContent = fmt(grand);
+  setGrandTotal(fmt(grand));
 }
 
 document.getElementById('addDayBtn').addEventListener('click', addDay);
+
+document.getElementById('fxDefaultKrwBtn').addEventListener('click', ()=>{
+  if(!state) return;
+  state.defaultCurrency = 'KRW';
+  saveState();
+  renderFxDefaultSettings();
+});
+document.getElementById('fxDefaultForeignBtn').addEventListener('click', ()=>{
+  if(!state) return;
+  const sel = document.getElementById('fxDefaultCurrency').value || 'USD';
+  state.defaultCurrency = sel;
+  saveState();
+  renderFxDefaultSettings();
+});
+document.getElementById('fxDefaultCurrency').addEventListener('change', (e)=>{
+  if(!state) return;
+  state.defaultCurrency = e.target.value;
+  saveState();
+});
+document.getElementById('fxDefaultRate').addEventListener('input', (e)=>{
+  if(!state) return;
+  const sanitized = sanitizeDecimal(e.target.value);
+  const num = sanitized ? parseFloat(sanitized) : 0;
+  state.defaultFxRate = num;
+  saveState();
+  e.target.value = sanitized;
+});
+document.getElementById('fxDefaultRate').addEventListener('change', ()=>{
+  if(!state) return;
+  const rateInput = document.getElementById('fxDefaultRate');
+  rateInput.value = state.defaultFxRate ? formatDecimal(state.defaultFxRate) : '';
+});
 
 document.getElementById('dayNav').addEventListener('click', (e)=>{
   const role = e.target.getAttribute('data-role');
@@ -1025,6 +1160,22 @@ document.getElementById('daysContainer').addEventListener('change', (e)=>{
     const it = state.items.find(x => x.id === e.target.getAttribute('data-id'));
     if(it){ it.payer = e.target.value; saveState(); }
   }
+  if(role === 'currency'){
+    const it = state.items.find(x => x.id === e.target.getAttribute('data-id'));
+    if(it){
+      it.currency = e.target.value;
+      if(it.currency === 'KRW'){
+        // 원화로 되돌리면 환산 이전에 입력해둔 원화 금액은 유지 (환율/외화 금액만 초기화)
+        it.foreignAmount = '';
+        it.fxRate = '';
+      } else {
+        // 외화로 전환 시, 기존 원화 금액을 초기 외화 금액으로 미리 채워줌 (환율은 직접 입력)
+        if(!it.foreignAmount) it.foreignAmount = it.amount || '';
+      }
+      saveState();
+      renderExpenses();
+    }
+  }
   if(role === 'participant'){
     const person = e.target.getAttribute('data-person');
     const it = state.items.find(x => x.id === e.target.getAttribute('data-id'));
@@ -1036,6 +1187,14 @@ document.getElementById('daysContainer').addEventListener('change', (e)=>{
       }
       saveState();
       renderExpenses();
+    }
+  }
+  if(role === 'fx-amount' || role === 'fx-rate'){
+    // 입력을 마치고 포커스를 벗어나면(blur) 콤마 서식을 적용
+    const it = state.items.find(x => x.id === e.target.getAttribute('data-id'));
+    if(it){
+      const val = role === 'fx-amount' ? it.foreignAmount : it.fxRate;
+      e.target.value = val ? formatDecimal(val) : '';
     }
   }
 });
@@ -1065,7 +1224,29 @@ document.getElementById('daysContainer').addEventListener('input', (e)=>{
     const dayTotal = dayItems.reduce((s,x)=> s + (Number(x.amount)||0), 0);
     e.target.closest('.day-card').querySelector('.day-total').textContent = fmt(dayTotal);
     const grand = state.items.reduce((s,x)=> s + (Number(x.amount)||0), 0);
-    document.getElementById('grandTotal').textContent = fmt(grand);
+    setGrandTotal(fmt(grand));
+  }
+
+  if(role === 'fx-amount' || role === 'fx-rate'){
+    const it = state.items.find(x => x.id === id);
+    if(!it) return;
+    const sanitized = sanitizeDecimal(e.target.value);
+    const num = sanitized ? parseFloat(sanitized) : 0;
+    if(role === 'fx-amount') it.foreignAmount = num; else it.fxRate = num;
+    it.amount = Math.round((Number(it.foreignAmount)||0) * (Number(it.fxRate)||0));
+    saveState();
+    // 소수점 입력 중에는 그대로 두고, 콤마 서식은 change(blur) 시점에 적용
+    e.target.value = sanitized;
+
+    const converted = e.target.closest('.amount-cell').querySelector('.fx-converted');
+    if(converted) converted.textContent = `≈ ${fmt(it.amount||0)}`;
+
+    const dayId = e.target.closest('.day-card').getAttribute('data-day');
+    const dayItems = state.items.filter(x => x.dayId === dayId);
+    const dayTotal = dayItems.reduce((s,x)=> s + (Number(x.amount)||0), 0);
+    e.target.closest('.day-card').querySelector('.day-total').textContent = fmt(dayTotal);
+    const grand = state.items.reduce((s,x)=> s + (Number(x.amount)||0), 0);
+    setGrandTotal(fmt(grand));
   }
 
   if(role === 'custom-amount'){
@@ -1200,12 +1381,14 @@ document.getElementById('exportBtn').addEventListener('click', ()=>{
   state.days.forEach(d => dayMap[d.id] = d.date);
 
   let csv = '﻿';
-  csv += '날짜,사용처,금액,결제자,해당자\n';
+  csv += '날짜,사용처,금액(원화),통화,외화금액,환율,결제자,해당자\n';
   state.items.forEach(it=>{
     const participants = it.splitMode === 'custom'
       ? it.participants.map(p => `${p}:${Number((it.customAmounts||{})[p])||0}`).join('/')
       : it.participants.join('/');
-    csv += `${dayMap[it.dayId] || ''},${csvEsc(it.place)},${it.amount||0},${csvEsc(it.payer)},${csvEsc(participants)}\n`;
+    const cur = it.currency || 'KRW';
+    const isForeign = cur !== 'KRW';
+    csv += `${dayMap[it.dayId] || ''},${csvEsc(it.place)},${it.amount||0},${cur},${isForeign?(it.foreignAmount||0):''},${isForeign?(it.fxRate||0):''},${csvEsc(it.payer)},${csvEsc(participants)}\n`;
   });
   csv += '\n이름,결제금액,사용금액,차액\n';
   state.people.forEach(p=>{

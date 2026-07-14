@@ -28,9 +28,15 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root{
-    --bg:#f5f6f8; --card:#ffffff; --border:#e2e5ea; --text:#1f2430; --muted:#6b7280;
-    --accent:#3b6ef6; --accent-light:#eaf0ff; --danger:#e0433f; --danger-light:#fdeceb;
-    --pos:#1a7f37; --pos-light:#e8f7ec;
+    color-scheme: light;
+    --bg:#f7f7f8; --card:#ffffff; --border:#e5e5e7; --text:#0a0a0a; --muted:#71717a;
+    --ink:#111111; --ink-hover:#000000;
+    --accent:#111111; --accent-light:#f0f0f1;
+    --danger:#dc2626; --danger-light:#fef2f2;
+    --pos:#16a34a; --pos-light:#f0fdf4;
+    --warn:#d97706; --warn-light:#fffbeb;
+    --shadow:0 1px 2px rgba(0,0,0,.03), 0 4px 12px rgba(0,0,0,.05);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.04);
   }
   *{box-sizing:border-box;}
   body{
@@ -38,15 +44,25 @@
     background:var(--bg); color:var(--text); padding:24px;
   }
   .wrap{max-width:1080px; margin:0 auto;}
-  h1{font-size:20px; margin:0 0 4px;}
-  .sub{color:var(--muted); font-size:13px; margin:0 0 20px;}
-  .tabs{display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border);}
+  .app-header{margin-bottom:20px;}
+  h1{font-size:20px; margin:0 0 6px; color:var(--text); display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-weight:800;}
+  .sub{color:var(--muted); font-size:13px; margin:0;}
+
+  /* 단계형 탭 (Members -> Expenses -> Result) */
+  .tabs{display:flex; align-items:center; gap:0; margin-bottom:20px; border-bottom:none;}
   .tab-btn{
-    padding:10px 18px; border:none; background:none; cursor:pointer; font-size:14px;
-    color:var(--muted); border-bottom:2px solid transparent; font-weight:600;
+    display:flex; align-items:center; gap:8px; border:none; background:none; cursor:pointer;
+    font-size:13px; padding:0; color:var(--muted); font-weight:600;
   }
-  .tab-btn.active{color:var(--accent); border-bottom-color:var(--accent);}
-  .card{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;}
+  .step-dot{
+    width:24px; height:24px; border-radius:50%; border:2px solid var(--border); flex-shrink:0;
+    display:inline-flex; align-items:center; justify-content:center; font-size:11px; font-weight:700;
+    color:var(--muted); background:var(--card);
+  }
+  .tab-btn.active .step-dot{background:var(--ink); border-color:var(--ink); color:#fff;}
+  .tab-btn.active .step-label{color:var(--text);}
+  .step-line{flex:1; height:2px; background:var(--border); margin:0 8px;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; margin-bottom:16px; box-shadow:var(--shadow-sm);}
   .tab-content{display:none;}
   .tab-content.active{display:block;}
 
@@ -61,15 +77,16 @@
   .people-list{display:flex; flex-direction:column; gap:8px; margin-top:16px;}
   .person-row{
     display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-    padding:10px 14px; background:var(--bg); border-radius:8px; border:1px solid var(--border);
+    padding:10px 14px; background:var(--card); border-radius:12px; border:1px solid var(--border); box-shadow:var(--shadow-sm);
   }
-  .person-row .name{font-weight:600; min-width:70px;}
+  .person-row .name{font-weight:700; min-width:70px;}
   .person-row .date-range{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted);}
   .person-row .date-range input[type=date]{font-size:12px; padding:5px 6px;}
   .person-row .del-btn{margin-left:auto;}
   .badge{
-    display:inline-block; font-size:12px; color:#fff; background:var(--accent);
-    border-radius:999px; width:22px; height:22px; line-height:22px; text-align:center;
+    display:inline-flex; align-items:center; justify-content:center; flex-shrink:0;
+    font-size:13px; font-weight:700; color:var(--text); background:var(--accent-light);
+    border:1px solid var(--border); border-radius:999px; width:28px; height:28px; text-align:center;
   }
   .empty{color:var(--muted); font-size:13px; padding:20px 0; text-align:center;}
 
@@ -82,18 +99,19 @@
   input[type=number]{ -moz-appearance:textfield; }
 
   button{
-    cursor:pointer; border:none; border-radius:6px; font-size:13px; font-weight:600;
-    padding:8px 14px; font-family:inherit;
+    cursor:pointer; border:none; border-radius:9px; font-size:13px; font-weight:700;
+    padding:9px 16px; font-family:inherit; transition:background .12s, box-shadow .12s, transform .12s;
   }
   button:disabled{opacity:.5; cursor:not-allowed;}
-  .btn-primary{background:var(--accent); color:#fff;}
-  .btn-primary:hover{background:#2f5bd6;}
-  .btn-secondary{background:var(--accent-light); color:var(--accent);}
+  .btn-primary{background:var(--ink); color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.15);}
+  .btn-primary:hover{background:var(--ink-hover); box-shadow:0 4px 10px rgba(0,0,0,.22);}
+  .btn-secondary{background:var(--accent-light); color:var(--text); border:1px solid var(--border);}
+  .btn-secondary:hover{background:#e9e9eb;}
   .btn-secondary.small{padding:6px 12px; font-size:12px;}
   .btn-danger{background:var(--danger-light); color:var(--danger);}
   .btn-danger:hover{background:#fbdad8;}
   .btn-danger.small{padding:6px 12px; font-size:12px;}
-  .btn-ghost{background:none; color:var(--muted); padding:4px 8px;}
+  .btn-ghost{background:none; color:var(--muted); padding:4px 8px; box-shadow:none;}
   .btn-ghost:hover{color:var(--danger);}
   .icon-btn{width:28px; height:28px; padding:0; display:inline-flex; align-items:center; justify-content:center; font-size:15px;}
 
@@ -106,19 +124,25 @@
   .col-amount{width:120px;}
   .col-payer{width:110px;}
   .col-del{width:36px;}
-  .participants{display:flex; flex-wrap:wrap; gap:6px 10px;}
+  .participants{display:flex; flex-wrap:wrap; gap:6px 8px;}
   .chip{
-    display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:3px 8px 3px 4px;
-    border-radius:999px; background:var(--bg); border:1px solid var(--border); cursor:pointer; user-select:none;
+    display:inline-flex; align-items:center; font-size:12px; padding:5px 12px;
+    border-radius:999px; background:var(--card); border:1px solid var(--border); color:var(--muted);
+    cursor:pointer; user-select:none; transition:background .12s, color .12s, border-color .12s;
   }
-  .chip input{margin:0;}
-  .chip.on{background:var(--accent-light); border-color:var(--accent); color:var(--accent); font-weight:600;}
+  .chip input{ position:absolute; opacity:0; width:0; height:0; pointer-events:none; }
+  .chip.on{background:var(--ink); border-color:var(--ink); color:#fff; font-weight:600;}
   .split-toggle{display:flex; gap:4px; margin-bottom:6px;}
   .split-toggle-btn{font-size:11px; padding:3px 9px; border-radius:6px; background:var(--bg); border:1px solid var(--border); color:var(--muted); font-weight:600;}
   .split-toggle-btn.active{background:var(--accent); color:#fff; border-color:var(--accent);}
-  .custom-split-row{display:flex; align-items:center; gap:6px; margin-bottom:4px;}
-  .custom-split-row .chip-checkbox{display:flex; align-items:center; gap:4px; font-size:12px; min-width:64px;}
-  .custom-split-row .chip-checkbox input{margin:0;}
+  .custom-split-row{display:flex; align-items:center; gap:8px; margin-bottom:4px;}
+  .custom-split-row .chip-checkbox{
+    display:inline-flex; align-items:center; font-size:12px; min-width:56px; justify-content:center;
+    padding:5px 12px; border-radius:999px; background:var(--card); border:1px solid var(--border); color:var(--muted);
+    cursor:pointer; user-select:none; transition:background .12s, color .12s, border-color .12s;
+  }
+  .custom-split-row .chip-checkbox input{ position:absolute; opacity:0; width:0; height:0; pointer-events:none; }
+  .custom-split-row .chip-checkbox.on{background:var(--ink); border-color:var(--ink); color:#fff; font-weight:600;}
   .custom-amount-input{width:90px; font-size:12px; padding:4px 6px;}
   .custom-split-sum{font-size:11px; color:var(--muted); margin-top:2px;}
   .custom-split-sum.mismatch{color:var(--danger); font-weight:600;}
@@ -126,7 +150,7 @@
   .toolbar .right{display:flex; gap:8px;}
 
   /* day cards */
-  .day-card{border:1px solid var(--border); border-radius:10px; margin-bottom:14px; overflow:hidden;}
+  .day-card{border:1px solid var(--border); border-radius:14px; margin-bottom:14px; overflow:hidden; box-shadow:var(--shadow-sm);}
   .day-header{
     display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--bg);
     border-bottom:1px solid var(--border); flex-wrap:wrap;
@@ -135,9 +159,12 @@
   .day-total{margin-left:auto; font-weight:700; font-size:13px; color:var(--text);}
   .day-body{padding:10px 16px 16px;}
   .grand-total-bar{
-    display:flex; justify-content:space-between; align-items:center; padding:14px 18px;
-    background:var(--accent-light); border-radius:10px; font-weight:700; margin-top:6px;
+    display:flex; justify-content:space-between; align-items:center; padding:16px 20px;
+    background:var(--ink); color:#fff;
+    border-radius:14px; margin-top:6px; box-shadow:var(--shadow);
   }
+  .grand-total-bar span:first-child{font-size:13px; font-weight:600; color:rgba(255,255,255,.75);}
+  .grand-total-bar span:last-child{font-size:20px; font-weight:800; letter-spacing:-.2px;}
 
   /* 날짜 많을 때 빠르게 이동하기 위한 상단 퀵 네비게이션 */
   .day-nav{
@@ -159,11 +186,11 @@
   .diff-neg{color:var(--danger); font-weight:700;}
   .settle-list{display:flex; flex-direction:column; gap:8px; margin-top:10px;}
   .settle-item{
-    display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--bg);
-    border-radius:8px; border:1px solid var(--border); font-size:14px;
+    display:flex; align-items:center; gap:10px; padding:13px 16px; background:var(--card);
+    border-radius:12px; border:1px solid var(--border); font-size:14px; box-shadow:var(--shadow-sm);
   }
   .settle-item .arrow{color:var(--accent); font-weight:700;}
-  .settle-item .amt{margin-left:auto; font-weight:700;}
+  .settle-item .amt{margin-left:auto; font-weight:800; color:var(--accent); font-size:15px;}
   .section-title{font-size:14px; font-weight:700; margin:0 0 10px;}
   .hint{font-size:12px; color:var(--muted); margin-top:6px;}
   .footer-note{text-align:center; color:var(--muted); font-size:12px; margin-top:20px;}
@@ -172,8 +199,10 @@
   #view-editor{display:none;}
   .trip-card{
     display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--border);
-    border-radius:10px; padding:16px 18px; margin-bottom:10px;
+    border-radius:14px; padding:16px 18px; margin-bottom:10px; box-shadow:var(--shadow-sm);
+    transition:box-shadow .12s, transform .12s;
   }
+  .trip-card:hover{box-shadow:var(--shadow); transform:translateY(-1px);}
   .trip-card-main{flex:1; cursor:pointer;}
   .trip-card-title{font-weight:700; font-size:15px; margin-bottom:4px; display:flex; align-items:center; gap:8px;}
   .trip-card-meta{font-size:12px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap;}
@@ -260,16 +289,18 @@
 
   .sync-badge{
     display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--muted);
-    padding:4px 9px; border-radius:999px; background:var(--bg); border:1px solid var(--border);
+    padding:4px 10px; border-radius:999px; background:var(--accent-light); border:1px solid var(--border);
   }
-  .sync-dot{width:7px; height:7px; border-radius:50%; background:var(--pos);}
-  .sync-dot.offline{background:var(--danger);}
+  .sync-dot{width:7px; height:7px; border-radius:50%; background:#16a34a;}
+  .sync-dot.offline{background:#dc2626;}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>✈️ 출장 정산 앱 <span class="sync-badge" id="syncBadge"><span class="sync-dot" id="syncDot"></span><span id="syncText">연결 중...</span></span></h1>
-  <p class="sub">인원과 날짜별 지출 내역을 입력하면, 각자 쓴 금액과 정산할 금액을 자동으로 계산해줍니다. 같은 링크로 접속한 사람들과 실시간으로 공유됩니다.</p>
+  <div class="app-header">
+    <h1>출장 정산 앱 <span class="sync-badge" id="syncBadge"><span class="sync-dot" id="syncDot"></span><span id="syncText">연결 중...</span></span></h1>
+    <p class="sub">인원과 날짜별 지출 내역을 입력하면, 각자 쓴 금액과 정산할 금액을 자동으로 계산해줍니다. 같은 링크로 접속한 사람들과 실시간으로 공유됩니다.</p>
+  </div>
 
   <!-- TRIP LIST VIEW -->
   <div id="view-list">
@@ -290,9 +321,11 @@
     </div>
 
     <div class="tabs">
-      <button class="tab-btn active" data-tab="people">1. 인원 설정</button>
-      <button class="tab-btn" data-tab="expenses">2. 지출 내역</button>
-      <button class="tab-btn" data-tab="summary">3. 정산 결과</button>
+      <button class="tab-btn active" data-tab="people"><span class="step-dot">1</span><span class="step-label">인원 설정</span></button>
+      <span class="step-line"></span>
+      <button class="tab-btn" data-tab="expenses"><span class="step-dot">2</span><span class="step-label">지출 내역</span></button>
+      <span class="step-line"></span>
+      <button class="tab-btn" data-tab="summary"><span class="step-dot">3</span><span class="step-label">정산 결과</span></button>
     </div>
 
     <!-- PEOPLE TAB -->
@@ -355,7 +388,7 @@
         <p class="hint">차액이 <span class="diff-pos">양수(+)</span>면 더 많이 내서 돌려받아야 할 돈, <span class="diff-neg">음수(-)</span>면 정산해서 줘야 할 돈입니다.</p>
       </div>
       <div class="card">
-        <p class="section-title">💸 최종 정산 (누가 누구에게 얼마)</p>
+        <p class="section-title">최종 정산</p>
         <div class="settle-list" id="settleList"></div>
       </div>
       <div class="toolbar">
@@ -868,7 +901,7 @@ function renderExpenses(){
           const on = it.participants.includes(p.name);
           const val = custom[p.name] ? Number(custom[p.name]).toLocaleString('ko-KR') : '';
           return `<div class="custom-split-row">
-            <label class="chip-checkbox">
+            <label class="chip-checkbox ${on?'on':''}">
               <input type="checkbox" data-role="participant" data-id="${it.id}" data-person="${escapeHtml(p.name)}" ${on?'checked':''}>
               ${escapeHtml(p.name)}
             </label>

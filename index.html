@@ -186,15 +186,31 @@
     table.stack-table{min-width:0; width:100%;}
     table.stack-table thead{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap;}
     table.stack-table, table.stack-table tbody, table.stack-table tr, table.stack-table td{display:block; width:100%;}
-    table.stack-table tr{border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:10px; background:var(--bg);}
+    table.stack-table tr{border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; background:var(--bg);}
     table.stack-table tr:has(.empty){border:none; padding:0; background:none;}
-    table.stack-table td{border:none; padding:6px 0;}
+    table.stack-table td{border:none; padding:5px 0;}
     table.stack-table td[data-label]:not([data-label=""])::before{
       content: attr(data-label);
-      display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:3px;
+      display:block; font-size:10px; font-weight:700; color:var(--muted); margin-bottom:2px;
     }
     table.stack-table td.td-del{padding-top:2px; text-align:right;}
     table.summary-table.stack-table td.num{text-align:left;}
+
+    /* 지출 항목 카드: 금액/결제자는 한 줄에 나란히, 삭제 버튼은 카드 우측 상단에 작게 */
+    table.expense-table tr{
+      display:grid; grid-template-columns:1fr 1fr; column-gap:10px; row-gap:6px;
+      position:relative; padding:10px 34px 10px 12px;
+    }
+    table.expense-table td{ display:block; width:auto; padding:0; }
+    table.expense-table td[data-label="사용처"]{ grid-column:1 / -1; }
+    table.expense-table td[data-label="해당자 / 분담 금액"]{ grid-column:1 / -1; margin-top:2px; }
+    table.expense-table input, table.expense-table select{ font-size:13px; padding:6px 8px; }
+    table.expense-table td.td-del{
+      position:absolute; top:8px; right:6px; grid-column:auto; text-align:center;
+    }
+    table.expense-table td.td-del .icon-btn{ width:24px; height:24px; font-size:13px; }
+    table.expense-table .split-toggle{ margin-bottom:5px; }
+    table.expense-table .participants{ gap:5px 8px; }
   }
 
   .sync-badge{

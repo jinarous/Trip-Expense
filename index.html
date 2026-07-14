@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>출장 정산 앱</title>
+<script>
+  // 오류가 나면 화면에 직접 표시 (콘솔을 열지 않아도 원인 확인 가능)
+  window.addEventListener('error', function(e){
+    showAppError((e.error && e.error.stack) || e.message || String(e));
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    showAppError((e.reason && e.reason.stack) || String(e.reason));
+  });
+  function showAppError(msg){
+    var box = document.getElementById('app-error-box');
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'app-error-box';
+      box.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#fdeceb;color:#a5231f;padding:14px 18px;font:13px/1.5 monospace;white-space:pre-wrap;border-bottom:2px solid #e0433f;max-height:40vh;overflow:auto;';
+      document.body.appendChild(box);
+    }
+    box.textContent = '⚠ 오류가 발생했습니다. 이 내용을 캡처해서 알려주세요:\n' + msg;
+  }
+</script>
+<!-- Firebase (Firestore) SDK - 별도 설치 없이 CDN으로 불러옵니다 -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --border:#e2e5ea; --text:#1f2430; --muted:#6b7280;
+    --accent:#3b6ef6; --accent-light:#eaf0ff; --danger:#e0433f; --danger-light:#fdeceb;
+    --pos:#1a7f37; --pos-light:#e8f7ec;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    background:var(--bg); color:var(--text); padding:24px;
+  }
+  .wrap{max-width:1080px; margin:0 auto;}
+  h1{font-size:20px; margin:0 0 4px;}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 20px;}
+  .tabs{display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border);}
+  .tab-btn{
+    padding:10px 18px; border:none; background:none; cursor:pointer; font-size:14px;
+    color:var(--muted); border-bottom:2px solid transparent; font-weight:600;
+  }
+  .tab-btn.active{color:var(--accent); border-bottom-color:var(--accent);}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:16px;}
+  .tab-content{display:none;}
+  .tab-content.active{display:block;}
+
+  /* people tab */
+  .people-add{display:flex; gap:8px; margin-bottom:8px; flex-wrap:wrap; align-items:flex-end;}
+  .people-add .field{display:flex; flex-direction:column; gap:4px;}
+  .people-add .field label{font-size:11px; color:var(--muted);}
+  .people-add .field.name-field{flex:1; min-width:160px;}
+  .people-add .range-sep{padding-bottom:8px; color:var(--muted);}
+  .people-list{display:flex; flex-direction:column; gap:8px; margin-top:16px;}
+  .person-row{
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:10px 14px; background:var(--bg); border-radius:8px; border:1px solid var(--border);
+  }
+  .person-row .name{font-weight:600; min-width:70px;}
+  .person-row .date-range{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted);}
+  .person-row .date-range input[type=date]{font-size:12px; padding:5px 6px;}
+  .person-row .del-btn{margin-left:auto;}
+  .badge{
+    display:inline-block; font-size:12px; color:#fff; background:var(--accent);
+    border-radius:999px; width:22px; height:22px; line-height:22px; text-align:center;
+  }
+  .empty{color:var(--muted); font-size:13px; padding:20px 0; text-align:center;}
+
+  input[type=text], input[type=number], input[type=date], select{
+    border:1px solid var(--border); border-radius:6px; padding:7px 9px; font-size:13px;
+    background:#fff; color:var(--text); font-family:inherit;
+  }
+  input[type=number]::-webkit-inner-spin-button,
+  input[type=number]::-webkit-outer-spin-button{ -webkit-appearance:none; margin:0; }
+  input[type=number]{ -moz-appearance:textfield; }
+
+  button{
+    cursor:pointer; border:none; border-radius:6px; font-size:13px; font-weight:600;
+    padding:8px 14px; font-family:inherit;
+  }
+  button:disabled{opacity:.5; cursor:not-allowed;}
+  .btn-primary{background:var(--accent); color:#fff;}
+  .btn-primary:hover{background:#2f5bd6;}
+  .btn-secondary{background:var(--accent-light); color:var(--accent);}
+  .btn-secondary.small{padding:6px 12px; font-size:12px;}
+  .btn-danger{background:var(--danger-light); color:var(--danger);}
+  .btn-danger:hover{background:#fbdad8;}
+  .btn-danger.small{padding:6px 12px; font-size:12px;}
+  .btn-ghost{background:none; color:var(--muted); padding:4px 8px;}
+  .btn-ghost:hover{color:var(--danger);}
+  .icon-btn{width:28px; height:28px; padding:0; display:inline-flex; align-items:center; justify-content:center; font-size:15px;}
+
+  table{width:100%; border-collapse:collapse; font-size:13px;}
+  th, td{padding:8px 6px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle;}
+  th{color:var(--muted); font-weight:600; font-size:12px; white-space:nowrap;}
+  td input[type=text], td input[type=number], td input[type=date]{width:100%;}
+  .col-place{min-width:140px;}
+  .col-amount{width:120px;}
+  .col-payer{width:110px;}
+  .col-del{width:36px;}
+  .participants{display:flex; flex-wrap:wrap; gap:6px 10px;}
+  .chip{
+    display:inline-flex; align-items:center; gap:4px; font-size:12px; padding:3px 8px 3px 4px;
+    border-radius:999px; background:var(--bg); border:1px solid var(--border); cursor:pointer; user-select:none;
+  }
+  .chip input{margin:0;}
+  .chip.on{background:var(--accent-light); border-color:var(--accent); color:var(--accent); font-weight:600;}
+  .toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:8px; flex-wrap:wrap;}
+  .toolbar .right{display:flex; gap:8px;}
+
+  /* day cards */
+  .day-card{border:1px solid var(--border); border-radius:10px; margin-bottom:14px; overflow:hidden;}
+  .day-header{
+    display:flex; align-items:center; gap:10px; padding:12px 16px; background:var(--bg);
+    border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  .day-label{font-weight:700; font-size:13px; color:var(--accent);}
+  .day-total{margin-left:auto; font-weight:700; font-size:13px; color:var(--text);}
+  .day-body{padding:10px 16px 16px;}
+  .grand-total-bar{
+    display:flex; justify-content:space-between; align-items:center; padding:14px 18px;
+    background:var(--accent-light); border-radius:10px; font-weight:700; margin-top:6px;
+  }
+
+  .summary-table td.num, .summary-table th.num{text-align:right;}
+  .diff-pos{color:var(--pos); font-weight:700;}
+  .diff-neg{color:var(--danger); font-weight:700;}
+  .settle-list{display:flex; flex-direction:column; gap:8px; margin-top:10px;}
+  .settle-item{
+    display:flex; align-items:center; gap:10px; padding:12px 14px; background:var(--bg);
+    border-radius:8px; border:1px solid var(--border); font-size:14px;
+  }
+  .settle-item .arrow{color:var(--accent); font-weight:700;}
+  .settle-item .amt{margin-left:auto; font-weight:700;}
+  .section-title{font-size:14px; font-weight:700; margin:0 0 10px;}
+  .hint{font-size:12px; color:var(--muted); margin-top:6px;}
+  .footer-note{text-align:center; color:var(--muted); font-size:12px; margin-top:20px;}
+
+  /* trip list view */
+  #view-editor{display:none;}
+  .trip-card{
+    display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--border);
+    border-radius:10px; padding:16px 18px; margin-bottom:10px;
+  }
+  .trip-card-main{flex:1; cursor:pointer;}
+  .trip-card-title{font-weight:700; font-size:15px; margin-bottom:4px;}
+  .trip-card-meta{font-size:12px; color:var(--muted); display:flex; gap:6px; flex-wrap:wrap;}
+  .trip-card-updated{font-size:11px; color:var(--muted); margin-top:4px;}
+
+  .editor-header{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
+  #tripTitleInput{flex:1; min-width:180px; font-size:15px; font-weight:700; padding:9px 12px;}
+
+  .sync-badge{
+    display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--muted);
+    padding:4px 9px; border-radius:999px; background:var(--bg); border:1px solid var(--border);
+  }
+  .sync-dot{width:7px; height:7px; border-radius:50%; background:var(--pos);}
+  .sync-dot.offline{background:var(--danger);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>✈️ 출장 정산 앱 <span class="sync-badge" id="syncBadge"><span class="sync-dot" id="syncDot"></span><span id="syncText">연결 중...</span></span></h1>
+  <p class="sub">인원과 날짜별 지출 내역을 입력하면, 각자 쓴 금액과 정산할 금액을 자동으로 계산해줍니다. 같은 링크로 접속한 사람들과 실시간으로 공유됩니다.</p>
+
+  <!-- TRIP LIST VIEW -->
+  <div id="view-list">
+    <div class="toolbar">
+      <p class="section-title" style="margin:0;">저장된 정산 목록</p>
+      <button class="btn-primary" id="newTripBtn">+ 새 정산 만들기</button>
+    </div>
+    <div id="tripList"></div>
+  </div>
+
+  <!-- EDITOR VIEW -->
+  <div id="view-editor">
+    <div class="editor-header">
+      <button class="btn-ghost" id="backToListBtn">← 정산 목록</button>
+      <input type="text" id="tripTitleInput" placeholder="정산 이름을 입력하세요 (예: 7월 여수 출장)">
+      <button class="btn-danger small" id="deleteTripCurrentBtn">이 정산 삭제</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="people">1. 인원 설정</button>
+      <button class="tab-btn" data-tab="expenses">2. 지출 내역</button>
+      <button class="tab-btn" data-tab="summary">3. 정산 결과</button>
+    </div>
+
+    <!-- PEOPLE TAB -->
+    <div class="tab-content active" id="tab-people">
+      <div class="card">
+        <p class="section-title">인원 추가</p>
+        <div class="people-add">
+          <div class="field name-field">
+            <label>이름</label>
+            <input type="text" id="newPersonInput" placeholder="예: 김정아">
+          </div>
+          <div class="field">
+            <label>출장 시작일</label>
+            <input type="date" id="newPersonStart">
+          </div>
+          <span class="range-sep">~</span>
+          <div class="field">
+            <label>출장 종료일</label>
+            <input type="date" id="newPersonEnd">
+          </div>
+          <button class="btn-primary" id="addPersonBtn">추가</button>
+        </div>
+        <p class="hint">출장 시작일~종료일을 입력하면, 그 기간의 지출을 추가할 때 해당자 체크가 자동으로 되어있습니다. 기간을 비워두면 전체 출장 기간에 참여하는 것으로 간주해요. (기간 밖이라도 필요하면 나중에 직접 체크할 수 있어요)</p>
+        <div class="people-list" id="peopleList"></div>
+      </div>
+    </div>
+
+    <!-- EXPENSES TAB -->
+    <div class="tab-content" id="tab-expenses">
+      <div class="card">
+        <div class="toolbar">
+          <p class="section-title" style="margin:0;">지출 내역</p>
+        </div>
+        <div id="daysContainer"></div>
+        <button class="btn-secondary" id="addDayBtn">+ 새 날짜 추가</button>
+        <div class="grand-total-bar">
+          <span>전체 합계</span>
+          <span id="grandTotal">0원</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUMMARY TAB -->
+    <div class="tab-content" id="tab-summary">
+      <div class="card">
+        <p class="section-title">인원별 정산 요약</p>
+        <table class="summary-table">
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th class="num">결제금액</th>
+              <th class="num">사용금액</th>
+              <th class="num">차액 (결제-사용)</th>
+            </tr>
+          </thead>
+          <tbody id="summaryBody"></tbody>
+        </table>
+        <p class="hint">차액이 <span class="diff-pos">양수(+)</span>면 더 많이 내서 돌려받아야 할 돈, <span class="diff-neg">음수(-)</span>면 정산해서 줘야 할 돈입니다.</p>
+      </div>
+      <div class="card">
+        <p class="section-title">💸 최종 정산 (누가 누구에게 얼마)</p>
+        <div class="settle-list" id="settleList"></div>
+      </div>
+      <div class="toolbar">
+        <div></div>
+        <div class="right">
+          <button class="btn-danger" id="resetBtn">이 정산 내용 초기화</button>
+          <button class="btn-primary" id="exportBtn">CSV로 내보내기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="footer-note">모든 변경사항은 실시간으로 저장되고, 같은 페이지를 보는 다른 사람 화면에도 자동 반영됩니다.</p>
+</div>
+
+<script>
+/* =========================================================
+   Firebase 설정 - Firebase 콘솔 > 프로젝트 설정 > 내 앱 에서
+   받은 firebaseConfig 값입니다.
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyAbMal4hQN9Rweb1JCPt0vawBO-xbyPaXA",
+  authDomain: "trip-expense-settlement.firebaseapp.com",
+  projectId: "trip-expense-settlement",
+  storageBucket: "trip-expense-settlement.firebasestorage.app",
+  messagingSenderId: "580639636788",
+  appId: "1:580639636788:web:18d77e8ebfd6c9df5f3961",
+  measurementId: "G-MBSB6E9V57"
+};
+
+firebase.initializeApp(firebaseConfig);
+const fsdb = firebase.firestore();
+const TRIPS_COLLECTION = 'trips';
+
+function setSyncStatus(ok, text){
+  document.getElementById('syncDot').classList.toggle('offline', !ok);
+  document.getElementById('syncText').textContent = text;
+}
+
+function uid(){ return 'id' + Math.random().toString(36).slice(2, 10); }
+
+function todayISO(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function addDaysISO(dateStr, n){
+  const d = dateStr ? new Date(dateStr + 'T00:00:00') : new Date();
+  d.setDate(d.getDate() + n);
+  const pad = x => String(x).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function normalizePeople(arr){
+  return (arr || []).map(p=>{
+    if(typeof p === 'string') return { name: p, startDate: '', endDate: '' };
+    return { name: p.name, startDate: p.startDate || '', endDate: p.endDate || '' };
+  });
+}
+
+function fmt(n){
+  n = Math.round(n || 0);
+  return n.toLocaleString('ko-KR') + '원';
+}
+
+function escapeHtml(s){
+  return String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- Firestore 연동 ---------- */
+let tripsCache = [];      // 목록 화면용 캐시
+let tripsUnsub = null;    // trips 컬렉션 구독 해제 함수
+let tripDocUnsub = null;  // 현재 정산 문서 구독 해제 함수
+let currentTripId = null;
+let state = null;         // 현재 편집 중인 정산 데이터
+let saveTimer = null;
+
+function subscribeTripsList(){
+  if(tripsUnsub) tripsUnsub();
+  setSyncStatus(false, '연결 중...');
+  tripsUnsub = fsdb.collection(TRIPS_COLLECTION).onSnapshot(snap=>{
+    setSyncStatus(true, '실시간 연결됨');
+    tripsCache = snap.docs.map(d=>{
+      const data = d.data();
+      return {
+        id: d.id, title: data.title || '', createdAt: data.createdAt || Date.now(),
+        updatedAt: data.updatedAt || Date.now(), people: normalizePeople(data.people),
+        days: data.days || [], items: data.items || []
+      };
+    });
+    if(document.getElementById('view-list').style.display !== 'none'){
+      renderTripList();
+    }
+  }, err=>{
+    setSyncStatus(false, '연결 실패');
+    showAppError('정산 목록을 불러오지 못했습니다.\n' + err.message + '\n\nFirestore 보안 규칙이 읽기/쓰기를 막고 있거나, firebaseConfig 값이 올바르지 않을 수 있어요.');
+  });
+}
+
+function unsubscribeTripDoc(){
+  if(tripDocUnsub){ tripDocUnsub(); tripDocUnsub = null; }
+}
+
+function subscribeTripDoc(id){
+  unsubscribeTripDoc();
+  tripDocUnsub = fsdb.collection(TRIPS_COLLECTION).doc(id).onSnapshot(snap=>{
+    if(snap.metadata.hasPendingWrites) return; // 내가 방금 보낸 변경의 echo는 무시 (중복 렌더 방지)
+    if(!snap.exists){
+      alert('이 정산은 다른 사람이 삭제했습니다.');
+      showList();
+      return;
+    }
+    const data = snap.data();
+    state = {
+      id: snap.id, title: data.title || '', createdAt: data.createdAt || Date.now(),
+      updatedAt: data.updatedAt || Date.now(), people: normalizePeople(data.people),
+      days: data.days || [], items: data.items || []
+    };
+    if(document.getElementById('view-editor').style.display !== 'none'){
+      const titleInput = document.getElementById('tripTitleInput');
+      if(document.activeElement !== titleInput) titleInput.value = state.title || '';
+      renderPeople();
+      renderExpenses();
+      renderSummary();
+    }
+  }, err=>{
+    showAppError('정산 데이터를 불러오지 못했습니다.\n' + err.message);
+  });
+}
+
+// state 변경 후 호출 -> 잠시 후 Firestore에 저장 (연속 입력 시 매 글자마다 쓰지 않도록 묶어서 저장)
+function saveState(){
+  if(!currentTripId || !state) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>{
+    const { id, ...data } = state;
+    data.updatedAt = Date.now();
+    fsdb.collection(TRIPS_COLLECTION).doc(currentTripId).set(data).catch(err=>{
+      showAppError('저장에 실패했습니다.\n' + err.message + '\n\nFirestore 보안 규칙에서 쓰기가 막혀있지 않은지 확인해주세요.');
+    });
+  }, 400);
+}
+
+/* ---------- VIEW SWITCHING ---------- */
+function showList(){
+  unsubscribeTripDoc();
+  currentTripId = null;
+  state = null;
+  document.getElementById('view-list').style.display = '';
+  document.getElementById('view-editor').style.display = 'none';
+  renderTripList();
+}
+
+function showEditor(){
+  document.getElementById('view-list').style.display = 'none';
+  document.getElementById('view-editor').style.display = '';
+  document.getElementById('tripTitleInput').value = state.title || '';
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  document.querySelector('.tab-btn[data-tab="people"]').classList.add('active');
+  document.getElementById('tab-people').classList.add('active');
+  renderPeople();
+  renderExpenses();
+  renderSummary();
+}
+
+/* ---------- TRIP LIST ---------- */
+function fmtUpdated(ts){
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function tripDateRange(trip){
+  const dates = (trip.days || []).map(d=>d.date).filter(Boolean).sort();
+  if(dates.length === 0) return '날짜 미정';
+  const first = dates[0].replaceAll('-', '.');
+  const last = dates[dates.length-1].replaceAll('-', '.');
+  return first === last ? first : `${first} ~ ${last}`;
+}
+
+function tripTotal(trip){
+  return (trip.items || []).reduce((s,it)=> s + (Number(it.amount)||0), 0);
+}
+
+function renderTripList(){
+  const container = document.getElementById('tripList');
+  if(tripsCache.length === 0){
+    container.innerHTML = '<div class="empty">아직 저장된 정산이 없습니다. "+ 새 정산 만들기"로 시작해보세요.</div>';
+    return;
+  }
+  const sorted = [...tripsCache].sort((a,b)=> b.updatedAt - a.updatedAt);
+  container.innerHTML = sorted.map(t=>`
+    <div class="trip-card">
+      <div class="trip-card-main" data-open-trip="${t.id}">
+        <div class="trip-card-title">${escapeHtml(t.title) || '(제목 없는 정산)'}</div>
+        <div class="trip-card-meta">
+          <span>${tripDateRange(t)}</span>
+          <span>· 인원 ${t.people.length}명</span>
+          <span>· 총 ${fmt(tripTotal(t))}</span>
+        </div>
+        <div class="trip-card-updated">마지막 수정 ${fmtUpdated(t.updatedAt)}</div>
+      </div>
+      <button class="btn-ghost del-btn" data-delete-trip="${t.id}">삭제</button>
+    </div>
+  `).join('');
+}
+
+document.getElementById('newTripBtn').addEventListener('click', ()=>{
+  const now = Date.now();
+  const data = { title: '', createdAt: now, updatedAt: now, people: [], days: [], items: [] };
+  fsdb.collection(TRIPS_COLLECTION).add(data).then(ref=>{
+    currentTripId = ref.id;
+    state = { id: ref.id, ...data };
+    subscribeTripDoc(ref.id);
+    showEditor();
+  }).catch(err=>{
+    showAppError('새 정산을 만들지 못했습니다.\n' + err.message + '\n\nFirestore 보안 규칙에서 쓰기가 막혀있지 않은지 확인해주세요.');
+  });
+});
+
+document.getElementById('tripList').addEventListener('click', (e)=>{
+  const openEl = e.target.closest('[data-open-trip]');
+  const delId = e.target.getAttribute('data-delete-trip');
+  if(delId){
+    const trip = tripsCache.find(t=>t.id===delId);
+    const label = (trip && trip.title) || '이름 없는 정산';
+    if(!confirm(`'${label}' 정산을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+    fsdb.collection(TRIPS_COLLECTION).doc(delId).delete().catch(err=>{
+      showAppError('삭제하지 못했습니다.\n' + err.message);
+    });
+    return;
+  }
+  if(openEl){
+    const id = openEl.getAttribute('data-open-trip');
+    const trip = tripsCache.find(t=>t.id===id);
+    if(!trip) return;
+    currentTripId = id;
+    state = { ...trip };
+    subscribeTripDoc(id);
+    showEditor();
+  }
+});
+
+document.getElementById('backToListBtn').addEventListener('click', showList);
+
+document.getElementById('deleteTripCurrentBtn').addEventListener('click', ()=>{
+  if(!state) return;
+  const label = state.title || '이름 없는 정산';
+  if(!confirm(`'${label}' 정산을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  fsdb.collection(TRIPS_COLLECTION).doc(currentTripId).delete().then(()=>{
+    unsubscribeTripDoc();
+    currentTripId = null;
+    state = null;
+    showList();
+  }).catch(err=>{
+    showAppError('삭제하지 못했습니다.\n' + err.message);
+  });
+});
+
+document.getElementById('tripTitleInput').addEventListener('input', (e)=>{
+  if(!state) return;
+  state.title = e.target.value;
+  saveState();
+});
+
+// 해당 날짜에 참여하는 인원 이름 목록 (참여 기간이 비어있으면 항상 참여로 간주)
+function defaultParticipantsForDate(date){
+  return state.people.filter(p=>{
+    if(!p.startDate && !p.endDate) return true;
+    if(!date) return true;
+    const afterStart = !p.startDate || date >= p.startDate;
+    const beforeEnd = !p.endDate || date <= p.endDate;
+    return afterStart && beforeEnd;
+  }).map(p=>p.name);
+}
+
+// 등록된 인원들의 출장 시작일 중 가장 이른 날짜 (출장 첫째날 추정용)
+function earliestTripDate(){
+  const dates = state.people.map(p => p.startDate).filter(Boolean);
+  if(dates.length === 0) return null;
+  return dates.reduce((min, d) => (d < min ? d : min));
+}
+
+/* ---------- TABS ---------- */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    if(btn.dataset.tab === 'summary') renderSummary();
+  });
+});
+
+/* ---------- PEOPLE ---------- */
+function addPerson(name, startDate, endDate){
+  name = name.trim();
+  if(!name) return;
+  if(state.people.some(p=>p.name === name)){ alert('이미 등록된 이름입니다.'); return; }
+  if(startDate && endDate && startDate > endDate){ alert('참여 시작일이 종료일보다 늦을 수 없습니다.'); return; }
+  state.people.push({ name, startDate: startDate || '', endDate: endDate || '' });
+  saveState();
+  renderPeople();
+  renderExpenses();
+}
+
+function removePerson(name){
+  if(!confirm(`'${name}'님을 삭제할까요? 지출 내역의 결제자/해당자 지정도 함께 해제됩니다.`)) return;
+  state.people = state.people.filter(p => p.name !== name);
+  state.items.forEach(it=>{
+    if(it.payer === name) it.payer = '';
+    it.participants = it.participants.filter(p => p !== name);
+  });
+  saveState();
+  renderPeople();
+  renderExpenses();
+}
+
+function renderPeople(){
+  const list = document.getElementById('peopleList');
+  if(state.people.length === 0){
+    list.innerHTML = '<div class="empty">아직 등록된 인원이 없습니다. 위에서 이름을 추가해주세요.</div>';
+    return;
+  }
+  list.innerHTML = state.people.map((p,i)=>`
+    <div class="person-row">
+      <span class="badge">${i+1}</span>
+      <span class="name">${escapeHtml(p.name)}</span>
+      <span class="date-range">
+        <input type="date" data-role="person-start" data-name="${escapeHtml(p.name)}" value="${p.startDate||''}">
+        <span>~</span>
+        <input type="date" data-role="person-end" data-name="${escapeHtml(p.name)}" value="${p.endDate||''}">
+        <span>${(!p.startDate && !p.endDate) ? '(전체 기간)' : ''}</span>
+      </span>
+      <button class="btn-ghost del-btn" data-remove-person="${escapeHtml(p.name)}">삭제</button>
+    </div>
+  `).join('');
+}
+
+document.getElementById('addPersonBtn').addEventListener('click', ()=>{
+  const nameInput = document.getElementById('newPersonInput');
+  const startInput = document.getElementById('newPersonStart');
+  const endInput = document.getElementById('newPersonEnd');
+  addPerson(nameInput.value, startInput.value, endInput.value);
+  nameInput.value = ''; startInput.value = ''; endInput.value = '';
+  nameInput.focus();
+});
+
+// 한글 등 IME 조합 중 Enter 중복 입력 방지
+let isComposingName = false;
+const newPersonInputEl = document.getElementById('newPersonInput');
+newPersonInputEl.addEventListener('compositionstart', ()=>{ isComposingName = true; });
+newPersonInputEl.addEventListener('compositionend', ()=>{ isComposingName = false; });
+newPersonInputEl.addEventListener('keydown', (e)=>{
+  if(e.key !== 'Enter') return;
+  if(e.isComposing || isComposingName || e.keyCode === 229) return;
+  e.preventDefault();
+  document.getElementById('addPersonBtn').click();
+});
+
+document.getElementById('peopleList').addEventListener('click', (e)=>{
+  const name = e.target.getAttribute('data-remove-person');
+  if(name) removePerson(name);
+});
+
+document.getElementById('peopleList').addEventListener('change', (e)=>{
+  const role = e.target.getAttribute('data-role');
+  if(role !== 'person-start' && role !== 'person-end') return;
+  const name = e.target.getAttribute('data-name');
+  const p = state.people.find(x => x.name === name);
+  if(!p) return;
+  if(role === 'person-start') p.startDate = e.target.value;
+  if(role === 'person-end') p.endDate = e.target.value;
+  if(p.startDate && p.endDate && p.startDate > p.endDate){
+    alert('참여 시작일이 종료일보다 늦을 수 없습니다.');
+  }
+  saveState();
+  renderPeople();
+});
+
+/* ---------- DAYS & ITEMS ---------- */
+function addDay(){
+  if(state.people.length === 0){ alert('먼저 인원을 등록해주세요.'); return; }
+  const lastDay = state.days[state.days.length - 1];
+  const date = lastDay ? addDaysISO(lastDay.date, 1) : (earliestTripDate() || todayISO());
+  const day = { id: uid(), date };
+  state.days.push(day);
+  state.items.push({
+    id: uid(), dayId: day.id, place: '', amount: 0, payer: '', participants: defaultParticipantsForDate(date)
+  });
+  saveState();
+  renderExpenses();
+}
+
+function removeDay(dayId){
+  if(!confirm('이 날짜의 모든 지출 항목이 함께 삭제됩니다. 계속할까요?')) return;
+  state.days = state.days.filter(d => d.id !== dayId);
+  state.items = state.items.filter(it => it.dayId !== dayId);
+  saveState();
+  renderExpenses();
+}
+
+function addItem(dayId){
+  const day = state.days.find(d => d.id === dayId);
+  state.items.push({
+    id: uid(), dayId, place: '', amount: 0, payer: '', participants: defaultParticipantsForDate(day ? day.date : '')
+  });
+  saveState();
+  renderExpenses();
+}
+
+function removeItem(id){
+  state.items = state.items.filter(it => it.id !== id);
+  saveState();
+  renderExpenses();
+}
+
+function renderExpenses(){
+  const container = document.getElementById('daysContainer');
+  const addDayBtn = document.getElementById('addDayBtn');
+  addDayBtn.disabled = state.people.length === 0;
+
+  if(state.people.length === 0){
+    container.innerHTML = '<div class="empty">먼저 "1. 인원 설정" 탭에서 인원을 등록해주세요.</div>';
+    document.getElementById('grandTotal').textContent = fmt(0);
+    return;
+  }
+
+  if(state.days.length === 0){
+    container.innerHTML = '<div class="empty">아래 버튼으로 첫 날짜를 추가해주세요. 같은 날짜의 지출은 한 번만 날짜를 선택하면 됩니다.</div>';
+    document.getElementById('grandTotal').textContent = fmt(0);
+    return;
+  }
+
+  container.innerHTML = state.days.map((day, idx)=>{
+    const items = state.items.filter(it => it.dayId === day.id);
+    const dayTotal = items.reduce((s,it)=> s + (Number(it.amount)||0), 0);
+
+    const rows = items.map(it=>{
+      const payerOptions = ['<option value="">선택</option>']
+        .concat(state.people.map(p=>`<option value="${escapeHtml(p.name)}" ${it.payer===p.name?'selected':''}>${escapeHtml(p.name)}</option>`))
+        .join('');
+      const chips = state.people.map(p=>{
+        const on = it.participants.includes(p.name);
+        return `<label class="chip ${on?'on':''}">
+          <input type="checkbox" data-role="participant" data-id="${it.id}" data-person="${escapeHtml(p.name)}" ${on?'checked':''}>
+          ${escapeHtml(p.name)}
+        </label>`;
+      }).join('');
+      const amountDisplay = it.amount ? Number(it.amount).toLocaleString('ko-KR') : '';
+
+      return `<tr data-row="${it.id}">
+        <td><input type="text" data-role="place" data-id="${it.id}" value="${escapeHtml(it.place)}" placeholder="예: 점심 식사"></td>
+        <td><input type="text" inputmode="numeric" data-role="amount" data-id="${it.id}" value="${amountDisplay}" placeholder="0"></td>
+        <td><select data-role="payer" data-id="${it.id}">${payerOptions}</select></td>
+        <td><div class="participants">${chips}</div></td>
+        <td><button class="btn-ghost icon-btn" data-role="delete-item" data-id="${it.id}" title="삭제">✕</button></td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="day-card" data-day="${day.id}">
+      <div class="day-header">
+        <span class="day-label">${idx+1}일차</span>
+        <input type="date" data-role="day-date" data-day="${day.id}" value="${day.date || ''}">
+        <span class="day-total">${fmt(dayTotal)}</span>
+        <button class="btn-ghost icon-btn" data-role="delete-day" data-day="${day.id}" title="이 날짜 삭제">✕</button>
+      </div>
+      <div class="day-body">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-place">사용처</th>
+              <th class="col-amount">금액 (원)</th>
+              <th class="col-payer">결제자</th>
+              <th>해당자 (1/n 분담)</th>
+              <th class="col-del"></th>
+            </tr>
+          </thead>
+          <tbody>${rows || '<tr><td colspan="5" class="empty">항목이 없습니다.</td></tr>'}</tbody>
+        </table>
+        <button class="btn-secondary small" data-role="add-item" data-day="${day.id}" style="margin-top:8px;">+ 항목 추가</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const grand = state.items.reduce((s,it)=> s + (Number(it.amount)||0), 0);
+  document.getElementById('grandTotal').textContent = fmt(grand);
+}
+
+document.getElementById('addDayBtn').addEventListener('click', addDay);
+
+document.getElementById('daysContainer').addEventListener('click', (e)=>{
+  const role = e.target.getAttribute('data-role');
+  if(role === 'add-item') addItem(e.target.getAttribute('data-day'));
+  if(role === 'delete-day') removeDay(e.target.getAttribute('data-day'));
+  if(role === 'delete-item') removeItem(e.target.getAttribute('data-id'));
+});
+
+document.getElementById('daysContainer').addEventListener('change', (e)=>{
+  const role = e.target.getAttribute('data-role');
+  if(role === 'day-date'){
+    const day = state.days.find(d => d.id === e.target.getAttribute('data-day'));
+    if(day){
+      day.date = e.target.value;
+      // 날짜가 바뀌면 그 날짜의 항목들 해당자도 참여 기간 기준으로 다시 계산
+      state.items.filter(it => it.dayId === day.id).forEach(it=>{
+        it.participants = defaultParticipantsForDate(day.date);
+      });
+      saveState();
+      renderExpenses();
+    }
+  }
+  if(role === 'payer'){
+    const it = state.items.find(x => x.id === e.target.getAttribute('data-id'));
+    if(it){ it.payer = e.target.value; saveState(); }
+  }
+  if(role === 'participant'){
+    const person = e.target.getAttribute('data-person');
+    const it = state.items.find(x => x.id === e.target.getAttribute('data-id'));
+    if(it){
+      if(e.target.checked){
+        if(!it.participants.includes(person)) it.participants.push(person);
+      } else {
+        it.participants = it.participants.filter(p=>p!==person);
+      }
+      saveState();
+      renderExpenses();
+    }
+  }
+});
+
+document.getElementById('daysContainer').addEventListener('input', (e)=>{
+  const role = e.target.getAttribute('data-role');
+  const id = e.target.getAttribute('data-id');
+
+  if(role === 'place'){
+    const it = state.items.find(x => x.id === id);
+    if(it){ it.place = e.target.value; saveState(); }
+  }
+
+  if(role === 'amount'){
+    const it = state.items.find(x => x.id === id);
+    if(!it) return;
+    const digits = e.target.value.replace(/[^0-9]/g, '');
+    const num = digits ? parseInt(digits, 10) : 0;
+    it.amount = num;
+    saveState();
+    e.target.value = num ? num.toLocaleString('ko-KR') : '';
+    const len = e.target.value.length;
+    e.target.setSelectionRange(len, len);
+
+    const dayId = e.target.closest('.day-card').getAttribute('data-day');
+    const dayItems = state.items.filter(x => x.dayId === dayId);
+    const dayTotal = dayItems.reduce((s,x)=> s + (Number(x.amount)||0), 0);
+    e.target.closest('.day-card').querySelector('.day-total').textContent = fmt(dayTotal);
+    const grand = state.items.reduce((s,x)=> s + (Number(x.amount)||0), 0);
+    document.getElementById('grandTotal').textContent = fmt(grand);
+  }
+});
+
+/* ---------- SUMMARY ---------- */
+function computeSummary(){
+  const paid = {}, used = {};
+  state.people.forEach(p=>{ paid[p.name]=0; used[p.name]=0; });
+  state.items.forEach(it=>{
+    const amount = Number(it.amount) || 0;
+    if(it.payer && paid.hasOwnProperty(it.payer)) paid[it.payer] += amount;
+    const n = it.participants.length;
+    if(n > 0){
+      const share = amount / n;
+      it.participants.forEach(p=>{
+        if(used.hasOwnProperty(p)) used[p] += share;
+      });
+    }
+  });
+  const diff = {};
+  state.people.forEach(p=>{ diff[p.name] = paid[p.name] - used[p.name]; });
+  return { paid, used, diff };
+}
+
+function computeSettlements(diff){
+  const creditors = [], debtors = [];
+  Object.entries(diff).forEach(([p, d])=>{
+    if(d > 0.5) creditors.push({p, amt:d});
+    else if(d < -0.5) debtors.push({p, amt:-d});
+  });
+  creditors.sort((a,b)=>b.amt-a.amt);
+  debtors.sort((a,b)=>b.amt-a.amt);
+
+  const tx = [];
+  let i=0, j=0;
+  while(i < debtors.length && j < creditors.length){
+    const pay = Math.min(debtors[i].amt, creditors[j].amt);
+    if(pay > 0.5){
+      tx.push({ from: debtors[i].p, to: creditors[j].p, amount: pay });
+    }
+    debtors[i].amt -= pay;
+    creditors[j].amt -= pay;
+    if(debtors[i].amt <= 0.5) i++;
+    if(creditors[j].amt <= 0.5) j++;
+  }
+  return tx;
+}
+
+function renderSummary(){
+  if(!state) return;
+  const { paid, used, diff } = computeSummary();
+  const body = document.getElementById('summaryBody');
+  if(state.people.length === 0){
+    body.innerHTML = '<tr><td colspan="4" class="empty">등록된 인원이 없습니다.</td></tr>';
+  } else {
+    body.innerHTML = state.people.map(p=>{
+      const d = diff[p.name];
+      const cls = d >= 0 ? 'diff-pos' : 'diff-neg';
+      const sign = d >= 0 ? '+' : '-';
+      return `<tr>
+        <td>${escapeHtml(p.name)}</td>
+        <td class="num">${fmt(paid[p.name])}</td>
+        <td class="num">${fmt(used[p.name])}</td>
+        <td class="num ${cls}">${sign}${fmt(Math.abs(d)).replace('-','')}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  const tx = computeSettlements(diff);
+  const settleList = document.getElementById('settleList');
+  if(tx.length === 0){
+    settleList.innerHTML = '<div class="empty">정산할 금액이 없습니다. 모두 정산 완료 상태입니다 🎉</div>';
+  } else {
+    settleList.innerHTML = tx.map(t=>`
+      <div class="settle-item">
+        <span><b>${escapeHtml(t.from)}</b></span>
+        <span class="arrow">→</span>
+        <span><b>${escapeHtml(t.to)}</b></span>
+        <span class="amt">${fmt(t.amount)}</span>
+      </div>
+    `).join('');
+  }
+}
+
+/* ---------- RESET (현재 정산만 초기화) / EXPORT ---------- */
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  if(!state) return;
+  if(!confirm('이 정산의 인원과 지출 내역이 모두 삭제됩니다. 계속할까요?')) return;
+  state.people = [];
+  state.days = [];
+  state.items = [];
+  saveState();
+  renderPeople();
+  renderExpenses();
+  renderSummary();
+});
+
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(!state) return;
+  const { paid, used, diff } = computeSummary();
+  const tx = computeSettlements(diff);
+  const dayMap = {};
+  state.days.forEach(d => dayMap[d.id] = d.date);
+
+  let csv = '﻿';
+  csv += '날짜,사용처,금액,결제자,해당자\n';
+  state.items.forEach(it=>{
+    const participants = it.participants.join('/');
+    csv += `${dayMap[it.dayId] || ''},${csvEsc(it.place)},${it.amount||0},${csvEsc(it.payer)},${csvEsc(participants)}\n`;
+  });
+  csv += '\n이름,결제금액,사용금액,차액\n';
+  state.people.forEach(p=>{
+    csv += `${csvEsc(p.name)},${paid[p.name]},${used[p.name]},${Math.round(diff[p.name])}\n`;
+  });
+  csv += '\n정산 내역\n';
+  tx.forEach(t=>{
+    csv += `${csvEsc(t.from)} -> ${csvEsc(t.to)},${Math.round(t.amount)}\n`;
+  });
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(state.title || '출장_정산_결과')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+function csvEsc(s){
+  s = String(s ?? '');
+  if(/[",\n]/.test(s)) s = '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+
+/* ---------- INIT ---------- */
+subscribeTripsList();
+showList();
+</script>
+</body>
+</html>

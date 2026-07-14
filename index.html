@@ -95,7 +95,8 @@
   .btn-ghost:hover{color:var(--danger);}
   .icon-btn{width:28px; height:28px; padding:0; display:inline-flex; align-items:center; justify-content:center; font-size:15px;}
 
-  table{width:100%; border-collapse:collapse; font-size:13px;}
+  .table-scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -2px;}
+  table{width:100%; min-width:520px; border-collapse:collapse; font-size:13px;}
   th, td{padding:8px 6px; border-bottom:1px solid var(--border); text-align:left; vertical-align:middle;}
   th{color:var(--muted); font-weight:600; font-size:12px; white-space:nowrap;}
   td input[type=text], td input[type=number], td input[type=date]{width:100%;}
@@ -136,6 +137,7 @@
     background:var(--accent-light); border-radius:10px; font-weight:700; margin-top:6px;
   }
 
+  .summary-table{min-width:420px;}
   .summary-table td.num, .summary-table th.num{text-align:right;}
   .diff-pos{color:var(--pos); font-weight:700;}
   .diff-neg{color:var(--danger); font-weight:700;}
@@ -163,6 +165,25 @@
 
   .editor-header{display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;}
   #tripTitleInput{flex:1; min-width:180px; font-size:15px; font-weight:700; padding:9px 12px;}
+
+  /* 모바일 화면 대응 */
+  @media (max-width: 640px){
+    body{padding:12px;}
+    h1{font-size:17px; flex-wrap:wrap; gap:6px;}
+    .card{padding:14px;}
+    .people-add{gap:6px;}
+    .people-add .field{min-width:0;}
+    .editor-header{gap:8px;}
+    .editor-header button{font-size:12px; padding:7px 10px;}
+    #tripTitleInput{font-size:14px; min-width:120px;}
+    .day-header{padding:10px 12px; gap:8px;}
+    .day-body{padding:8px 10px 12px;}
+    .grand-total-bar{padding:12px 14px; font-size:14px;}
+    table{font-size:12px;}
+    .col-place{min-width:110px;}
+    .col-amount{width:90px;}
+    .col-payer{width:90px;}
+  }
 
   .sync-badge{
     display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--muted);
@@ -244,17 +265,19 @@
     <div class="tab-content" id="tab-summary">
       <div class="card">
         <p class="section-title">인원별 정산 요약</p>
-        <table class="summary-table">
-          <thead>
-            <tr>
-              <th>이름</th>
-              <th class="num">결제금액</th>
-              <th class="num">사용금액</th>
-              <th class="num">차액 (결제-사용)</th>
-            </tr>
-          </thead>
-          <tbody id="summaryBody"></tbody>
-        </table>
+        <div class="table-scroll">
+          <table class="summary-table">
+            <thead>
+              <tr>
+                <th>이름</th>
+                <th class="num">결제금액</th>
+                <th class="num">사용금액</th>
+                <th class="num">차액 (결제-사용)</th>
+              </tr>
+            </thead>
+            <tbody id="summaryBody"></tbody>
+          </table>
+        </div>
         <p class="hint">차액이 <span class="diff-pos">양수(+)</span>면 더 많이 내서 돌려받아야 할 돈, <span class="diff-neg">음수(-)</span>면 정산해서 줘야 할 돈입니다.</p>
       </div>
       <div class="card">
@@ -759,18 +782,20 @@ function renderExpenses(){
         <button class="btn-ghost icon-btn" data-role="delete-day" data-day="${day.id}" title="이 날짜 삭제">✕</button>
       </div>
       <div class="day-body">
-        <table>
-          <thead>
-            <tr>
-              <th class="col-place">사용처</th>
-              <th class="col-amount">금액 (원)</th>
-              <th class="col-payer">결제자</th>
-              <th>해당자 / 분담 금액</th>
-              <th class="col-del"></th>
-            </tr>
-          </thead>
-          <tbody>${rows || '<tr><td colspan="5" class="empty">항목이 없습니다.</td></tr>'}</tbody>
-        </table>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-place">사용처</th>
+                <th class="col-amount">금액 (원)</th>
+                <th class="col-payer">결제자</th>
+                <th>해당자 / 분담 금액</th>
+                <th class="col-del"></th>
+              </tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="5" class="empty">항목이 없습니다.</td></tr>'}</tbody>
+          </table>
+        </div>
         <button class="btn-secondary small" data-role="add-item" data-day="${day.id}" style="margin-top:8px;">+ 항목 추가</button>
       </div>
     </div>`;

@@ -103,6 +103,12 @@
     padding:9px 16px; font-family:inherit; transition:background .12s, box-shadow .12s, transform .12s;
   }
   button:disabled{opacity:.5; cursor:not-allowed;}
+  input:disabled, select:disabled{opacity:.55; cursor:not-allowed; background:var(--bg);}
+  .locked-banner{
+    display:none; align-items:center; gap:8px; background:var(--accent-light); border:1px solid var(--border);
+    border-radius:10px; padding:10px 14px; font-size:12px; color:var(--text); margin-bottom:14px; font-weight:600;
+  }
+  .locked-banner.show{display:flex;}
   .btn-primary{background:var(--ink); color:#fff; box-shadow:0 2px 6px rgba(0,0,0,.15);}
   .btn-primary:hover{background:var(--ink-hover); box-shadow:0 4px 10px rgba(0,0,0,.22);}
   .btn-secondary{background:var(--accent-light); color:var(--text); border:1px solid var(--border);}
@@ -371,6 +377,8 @@
       </div>
     </div>
 
+    <div class="locked-banner" id="lockedBanner">🔒 완료 처리된 정산이라 수정할 수 없어요. 수정하려면 위에서 "다시 진행중으로"를 눌러주세요.</div>
+
     <div class="tabs">
       <button class="tab-btn active" data-tab="people"><span class="step-dot">1</span><span class="step-label">인원 설정</span></button>
       <span class="step-line"></span>
@@ -521,6 +529,14 @@ firebase.initializeApp(firebaseConfig);
 const fsdb = firebase.firestore();
 const TRIPS_COLLECTION = 'trips';
 
+// 오프라인 캐시(IndexedDB) 활성화: 인터넷이 끊긴 동안 탭을 닫았다 열어도 입력한 내용이 남아있다가,
+// 다시 연결되면 자동으로 서버에 동기화된다. (같은 브라우저에서 탭을 여러 개 띄워도 되도록 synchronizeTabs 사용)
+fsdb.enablePersistence({ synchronizeTabs: true }).catch(err=>{
+  // 지원하지 않는 브라우저(예: 일부 사파리 프라이빗 모드)이거나 저장공간을 못 쓰는 경우에는
+  // 오프라인 캐시 없이 평소처럼(온라인일 때만 정상 동작) 계속 사용할 수 있도록 조용히 넘어간다.
+  console.warn('오프라인 캐시를 사용할 수 없습니다:', err.code || err.message);
+});
+
 // 정산 비밀번호를 다같이 잊어버렸을 때를 위한 마스터 비밀번호 (해시로만 저장, 원문은 코드 어디에도 없음)
 const MASTER_PASSWORD_HASH = '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0';
 
@@ -628,8 +644,10 @@ function clearTripUnlock(id){
 function subscribeTripsList(){
   if(tripsUnsub) tripsUnsub();
   setSyncStatus(false, '연결 중...');
-  tripsUnsub = fsdb.collection(TRIPS_COLLECTION).onSnapshot(snap=>{
-    setSyncStatus(true, '실시간 연결됨');
+  // includeMetadataChanges: true 를 줘야, 데이터 변화가 없어도 온라인<->오프라인(캐시) 전환 시점에 콜백이 다시 호출된다.
+  tripsUnsub = fsdb.collection(TRIPS_COLLECTION).onSnapshot({ includeMetadataChanges: true }, snap=>{
+    // fromCache가 true면 서버가 아니라 로컬 오프라인 캐시에서 읽은 데이터라는 뜻 (= 지금은 오프라인)
+    setSyncStatus(!snap.metadata.fromCache, snap.metadata.fromCache ? '오프라인 (캐시된 내용)' : '실시간 연결됨');
     tripsCache = snap.docs.map(d=>{
       const data = d.data();
       return {
@@ -739,11 +757,38 @@ function renderPwSetButton(){
   btn.textContent = state.passwordHash ? '🔒 비밀번호 변경/해제' : '🔒 비밀번호 설정';
 }
 
+// 정산이 "완료" 상태면 인원/지출 내용을 수정할 수 없도록 잠근다.
+// (목록 이동, 상태 되돌리기, 삭제, 비밀번호 설정, CSV 내보내기, 날짜 이동 내비게이션은 계속 가능)
+function applyEditLock(){
+  if(!state) return;
+  const locked = state.status === 'done';
+
+  document.getElementById('lockedBanner').classList.toggle('show', locked);
+
+  // 상단의 고정 컨트롤들
+  ['tripTitleInput', 'newPersonInput', 'newPersonStart', 'newPersonEnd', 'addPersonBtn',
+   'fxDefaultKrwBtn', 'fxDefaultForeignBtn', 'fxDefaultCurrency', 'fxDefaultRate', 'addDayBtn',
+   'resetBtn'
+  ].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.disabled = locked;
+  });
+
+  // 인원 목록/지출 항목처럼 매번 새로 그려지는 영역 안의 입력·버튼도 함께 잠금
+  // (날짜 이동 버튼이 있는 dayNav는 훑어보기용이라 잠그지 않음)
+  ['peopleList', 'daysContainer'].forEach(containerId=>{
+    const el = document.getElementById(containerId);
+    if(!el) return;
+    el.querySelectorAll('input, select, button').forEach(node=>{ node.disabled = locked; });
+  });
+}
+
 document.getElementById('toggleStatusBtn').addEventListener('click', ()=>{
   if(!state) return;
   state.status = state.status === 'done' ? 'ongoing' : 'done';
   saveState();
   renderStatusButton();
+  applyEditLock();
 });
 
 /* ---------- TRIP LIST ---------- */
@@ -982,21 +1027,22 @@ function renderPeople(){
   const list = document.getElementById('peopleList');
   if(state.people.length === 0){
     list.innerHTML = '<div class="empty">아직 등록된 인원이 없습니다. 위에서 이름을 추가해주세요.</div>';
-    return;
+  } else {
+    list.innerHTML = state.people.map((p,i)=>`
+      <div class="person-row">
+        <span class="badge">${i+1}</span>
+        <span class="name">${escapeHtml(p.name)}</span>
+        <span class="date-range">
+          <input type="date" data-role="person-start" data-name="${escapeHtml(p.name)}" value="${p.startDate||''}">
+          <span>~</span>
+          <input type="date" data-role="person-end" data-name="${escapeHtml(p.name)}" value="${p.endDate||''}">
+          <span>${(!p.startDate && !p.endDate) ? '(전체 기간)' : ''}</span>
+        </span>
+        <button class="btn-ghost del-btn" data-remove-person="${escapeHtml(p.name)}">삭제</button>
+      </div>
+    `).join('');
   }
-  list.innerHTML = state.people.map((p,i)=>`
-    <div class="person-row">
-      <span class="badge">${i+1}</span>
-      <span class="name">${escapeHtml(p.name)}</span>
-      <span class="date-range">
-        <input type="date" data-role="person-start" data-name="${escapeHtml(p.name)}" value="${p.startDate||''}">
-        <span>~</span>
-        <input type="date" data-role="person-end" data-name="${escapeHtml(p.name)}" value="${p.endDate||''}">
-        <span>${(!p.startDate && !p.endDate) ? '(전체 기간)' : ''}</span>
-      </span>
-      <button class="btn-ghost del-btn" data-remove-person="${escapeHtml(p.name)}">삭제</button>
-    </div>
-  `).join('');
+  applyEditLock();
 }
 
 document.getElementById('addPersonBtn').addEventListener('click', ()=>{
@@ -1111,6 +1157,7 @@ function renderExpenses(){
     container.innerHTML = '<div class="empty">먼저 "1. 인원 설정" 탭에서 인원을 등록해주세요.</div>';
     setGrandTotal(fmt(0));
     dayNav.innerHTML = '';
+    applyEditLock();
     return;
   }
 
@@ -1118,6 +1165,7 @@ function renderExpenses(){
     container.innerHTML = '<div class="empty">아래 버튼으로 첫 날짜를 추가해주세요. 같은 날짜의 지출은 한 번만 날짜를 선택하면 됩니다.</div>';
     setGrandTotal(fmt(0));
     dayNav.innerHTML = '';
+    applyEditLock();
     return;
   }
 
@@ -1236,6 +1284,7 @@ function renderExpenses(){
 
   const grand = state.items.reduce((s,it)=> s + (Number(it.amount)||0), 0);
   setGrandTotal(fmt(grand));
+  applyEditLock();
 }
 
 document.getElementById('addDayBtn').addEventListener('click', addDay);
@@ -1530,6 +1579,7 @@ function renderSummary(){
       </div>
     `).join('');
   }
+  applyEditLock();
 }
 
 /* ---------- RESET (현재 정산만 초기화) / EXPORT ---------- */

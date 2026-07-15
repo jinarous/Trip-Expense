@@ -195,7 +195,7 @@
     background:var(--bg); border:1px solid var(--border); color:var(--muted); font-weight:600;
   }
   .day-nav-btn:hover{background:var(--accent-light); color:var(--accent); border-color:var(--accent);}
-  .day-nav-btn.bottom-btn{margin-left:auto; background:var(--accent-light); color:var(--accent); border-color:var(--accent);}
+  .day-nav-btn.top-btn{margin-left:auto; background:var(--accent-light); color:var(--accent); border-color:var(--accent);}
 
   .summary-table{min-width:420px;}
   .summary-table td.num, .summary-table th.num{text-align:right;}
@@ -1126,7 +1126,7 @@ function renderExpenses(){
     const navBtns = state.days.map((day, idx)=>
       `<button type="button" class="day-nav-btn" data-role="scroll-to-day" data-day="${day.id}">${idx+1}일차</button>`
     ).join('');
-    dayNav.innerHTML = navBtns + `<button type="button" class="day-nav-btn bottom-btn" data-role="scroll-to-bottom">맨 아래로 ↓</button>`;
+    dayNav.innerHTML = navBtns + `<button type="button" class="day-nav-btn top-btn" data-role="scroll-to-top">맨 위로 ↑</button>`;
   } else {
     dayNav.innerHTML = '';
   }
@@ -1279,8 +1279,8 @@ document.getElementById('dayNav').addEventListener('click', (e)=>{
     const target = document.querySelector(`.day-card[data-day="${dayId}"]`);
     if(target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  if(role === 'scroll-to-bottom'){
-    document.getElementById('addDayBtn').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if(role === 'scroll-to-top'){
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 });
 
